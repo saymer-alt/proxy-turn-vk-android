@@ -25,11 +25,16 @@ def main():
  # Phase4 source equivalence guard below is still enforced unchanged.
  diagnostic_blobs={
   'go_client/main.go':'68b01a273d6d6bf90a15bba747158760370131fc',
-  'go_client/lab_security.go':'fd01953c27548f9a9dc2ba706913f913caf1aa1d',
+  'go_client/lab_security.go':'33677c952b92a2712622bece7c2d732d7b8fa400',
   'go_client/session.go':'81febbe4125d585eb8d9db35b43117597ce70228',
   'go_client/lab_getconf_status_test.go':'53e1fc751237d11555c1b64506a643bba0e956a5',
-  'go_client/socks5.go':'f564de47b5b8a7d78ff283cae9691c0c590cdf21',
+  'go_client/socks5.go':'83dd16836debb08a58a8452e090a49d9b130acf8',
   'go_client/lab_socks_mode_test.go':'70e555096897d2b672b3d9e39828cc64088a6311',
+  'go_client/socks_service.go':'43c53996b0afebb7a34ed3d85e0165a6f3b7b5b8',
+  'go_client/socks_udp_associate.go':'df71ad294b9afc6b1d004a10dae8a2b846313098',
+  'go_client/socks_udp_associate_test.go':'831a65d2720dfab7cca8c4eb2800e6ed81f12551',
+  'hardened-relay/server_pair_fixture_test.go':'2c29f2276dcc699bc2b9863e995b712a572d460c',
+  'tools/check_socks_udp_pair.py':'2523ec173a79f16c4f697015024dcab67e893142',
  }
  for name,blob in diagnostic_blobs.items():
   assert run(['git','-C',ROOT,'hash-object',name])==blob,'UNREVIEWED_DIAGNOSTIC_SOURCE_CHANGE: '+name
@@ -70,7 +75,7 @@ def main():
  replacement+="    assert external(old)==external(new), 'THIRD_PARTY_SOURCE_CHANGED'\n"
  replacement+="    prefix=lambda path:path.read_text().split('===== SELECTED SOURCE COPYRIGHT HEADERS =====')[0]\n"
  replacement+="    assert prefix(work.parent/'base-inventory/NOTICE-COLLECTION.txt')==prefix(work/'license-evidence/NOTICE-COLLECTION.txt'), 'LICENSE_TEXT_CHANGED'\n"
- replacement+="    report['candidate_comparison']={'client_sha256_before':baseline['client_sha256'],'client_sha256_after':expected,'independent_candidate_rebuild_identical':True,'relay_identical':True,'third_party_sources_and_notices_identical':True,'local_source_inventory_changed':True,'reason':'explicit qWDTT importer plus SHA-pinned GETCONF and fixed-loopback SOCKS lab diagnostics; local source inventory changed without dependency, wire protocol or worker-limit changes'}\n"
+ replacement+="    report['candidate_comparison']={'client_sha256_before':baseline['client_sha256'],'client_sha256_after':expected,'independent_candidate_rebuild_identical':True,'relay_identical':True,'third_party_sources_and_notices_identical':True,'local_source_inventory_changed':True,'reason':'explicit qWDTT, GETCONF and fixed-loopback SOCKS5 TCP/UDP netstack; all client changes SHA-pinned; remote WDTT wire protocol, relay and worker limits unchanged'}\n"
  build.write_text(text[:start]+replacement+text[end:])
  built=work/'build'
  run(['python3',build,'--go',go,'--sdk-archive',pathlib.Path(a.sdk).resolve(),'--work',built,'--source',ROOT,'--cache',work/'gocache','--modules',work/'gopath'])
@@ -87,6 +92,7 @@ def main():
  pair_text=pair_text.replace(marker,marker+"\n            wait_for(lambda:(d/'qwdtt-second-hash-turn').exists(),children)\n            result['checks']['actual_qwdtt_private_import_and_second_hash_TURN_auth']=True")
  pair.write_text(pair_text)
  run(['python3',pair,'--harness',built/'server-pair.test','--relay',built/'wdtt-relay-linux-amd64','--client',built/'wt-client-linux-amd64','--mihomo',work/'test-deps/mihomo-compatible','--converter',kas/'experimental/wdtt/wg_to_mihomo.py','--report',built/'qwdtt-local-pair-report.json'],env={**os.environ,'WDTT_QWDTT_CLIENT':str(built/'wt-client-linux-amd64')})
+ run(['python3',ROOT/'tools/check_socks_udp_pair.py','--harness',built/'server-pair.test','--client',built/'wt-client-linux-amd64','--report',built/'socks-udp-pair-report.json'])
  run(['python3',wd/'test_production_boundary.py','--capture',work/'production-before.json'])
  for shell in [['sh'],['busybox','ash']]:run([*shell,'-n',recipe/'warpscout/install.sh'])
  run(['shellcheck','-S','error',recipe/'warpscout/install.sh'])

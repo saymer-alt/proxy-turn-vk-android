@@ -198,6 +198,10 @@ func TestLocalPairHarness(t *testing.T) {
 		t.Fatal("creds write")
 	}
 	config := map[string]any{"peer": "127.0.0.1:19003", "listen": "127.0.0.1:19000", "password": password, "vk": "fixture", "auth": "account", "creds_file": filepath.Join(dir, "turn-creds.json"), "dns": "custom:127.0.0.1", "workers": 1, "device": "fixture"}
+	if os.Getenv("WDTT_SOCKS_UDP_CLIENT") == "1" {
+		config["mode"] = "socks"
+		config["socks_listen"] = "127.0.0.1:1081"
+	}
 	cfg, _ := json.Marshal(config)
 	if client := os.Getenv("WDTT_QWDTT_CLIENT"); client != "" {
 		uri := "qwdtt://config?" + url.Values{"name": {"Synthetic pair"}, "peer": {"127.0.0.1:19003"}, "hashes": {"fixture,fixture2"}, "workers": {"2"}, "port": {"19000"}, "pass": {password}}.Encode()

@@ -184,6 +184,21 @@ func labValidateSocksWG(c *wgQuickConfig) bool {
 	return true
 }
 
+// Only fixed owner-lab UDP codes are stored. Never include payloads, domains,
+// client addresses, credentials or upstream response text in diagnostics.
+func labUDPStatus(code string) {
+    if labCfg.Mode != "socks" { return }
+    switch code {
+    case "UDP_ASSOCIATE_READY", "UDP_ASSOCIATE_FAILED":
+    default:
+        return
+    }
+    if labWrite("udp-status", []byte(code+"\n")) != nil {
+        labStatus("CONFIG_WRITE_FAILED")
+        os.Exit(78)
+    }
+}
+
 func labGetConfResult(conf string, err error) string {
 	if err != nil {
 		if strings.HasPrefix(err.Error(), "FATAL_AUTH:") {

@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"strings"
@@ -91,38 +90,3 @@ func dialIPv4Only(tnet *netstack.Net) func(ctx context.Context, network, addr st
 	}
 }
 
-// runSocks5Server serves SOCKS5 TCP CONNECT via WireGuard netstack until ctx is done.
-func runSocks5Server(ctx context.Context, listenAddr string, tnet *netstack.Net) error {
-	conf := &socks5.Config{
-		Dial:     dialIPv4Only(tnet),
-		Resolver: &netstackNameResolver{tnet: tnet},
-		Rules:    ipv4OnlyRule{},
-		Logger:   log.New(io.Writer(socksLogFilter{}), "", 0),
-	}
-	server, err := socks5.New(conf)
-	if err != nil {
-		return err
-	}
-
-	ln, err := net.Listen("tcp", listenAddr)
-	if err != nil {
-		labSocksStatus("SOCKS_BIND_FAILED")
-		return fmt.Errorf("listen %s: %w", listenAddr, err)
-	}
-	labSocksStatus("SOCKS_LISTENING")
-
-	go func() {
-		<-ctx.Done()
-		_ = ln.Close()
-	}()
-
-	log.Printf("[SOCKS] listening %s", listenAddr)
-	err = server.Serve(ln)
-	if ctx.Err() != nil {
-		return nil
-	}
-	if err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
-		return err
-	}
-	return nil
-}
