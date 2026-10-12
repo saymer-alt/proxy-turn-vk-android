@@ -106,8 +106,10 @@ func runSocks5Server(ctx context.Context, listenAddr string, tnet *netstack.Net)
 
 	ln, err := net.Listen("tcp", listenAddr)
 	if err != nil {
+		labSocksStatus("SOCKS_BIND_FAILED")
 		return fmt.Errorf("listen %s: %w", listenAddr, err)
 	}
+	labSocksStatus("SOCKS_LISTENING")
 
 	go func() {
 		<-ctx.Done()

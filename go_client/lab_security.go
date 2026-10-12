@@ -12,6 +12,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -29,6 +30,8 @@ type labConfig struct {
 	DNS       string `json:"dns"`
 	Workers   int    `json:"workers"`
 	Device    string `json:"device"`
+	Mode      string `json:"mode"`
+	SocksListen string `json:"socks_listen"`
 }
 
 var labCfg labConfig
@@ -137,6 +140,50 @@ func labGetConfStatus(code string) {
 	}
 }
 
+// SOCKS status is separate from the GETCONF and TURN/DTLS results; a TCP
+// listener alone is not evidence of a WireGuard handshake or routed traffic.
+func labSocksStatus(code string) {
+	if labCfg.Mode != "socks" {
+		return
+	}
+	switch code {
+	case "WAITING_FOR_WG", "WG_STARTING", "WG_CONFIG_REJECTED",
+		"WG_START_FAILED", "SOCKS_BIND_FAILED", "SOCKS_LISTENING",
+		"SOCKS_SERVER_FAILED", "SOCKS_STOPPED":
+	default:
+		return
+	}
+	if labWrite("socks-status", []byte(code+"\n")) != nil {
+		labStatus("CONFIG_WRITE_FAILED")
+		os.Exit(78)
+	}
+}
+
+// For the experimental SOCKS profile, the server-provided WG endpoint must
+// loop back into THIS WDTT client, not unexpectedly dial an external socket.
+func labValidateSocksWG(c *wgQuickConfig) bool {
+	if c == nil || c.endpoint != labCfg.Listen ||
+		len(c.addresses) != 1 || len(c.dns) == 0 ||
+		c.mtu < 576 || c.mtu > 1420 {
+		return false
+	}
+	if !c.addresses[0].Is4() {
+		return false
+	}
+	for _, d := range c.dns {
+		if !d.Is4() {
+			return false
+		}
+	}
+	for _, raw := range c.allowedIPs {
+		net, err := netip.ParsePrefix(raw)
+		if err != nil || !net.Addr().Is4() {
+			return false
+		}
+	}
+	return true
+}
+
 func labGetConfResult(conf string, err error) string {
 	if err != nil {
 		if strings.HasPrefix(err.Error(), "FATAL_AUTH:") {
@@ -154,7 +201,14 @@ func labGetConfResult(conf string, err error) string {
 	return "GETCONF_RECEIVED"
 }
 func labApplyFlags() {
-	values := map[string]string{"peer": labCfg.Peer, "listen": labCfg.Listen, "password": labCfg.Password, "vk": labCfg.VK, "vk-auth": labCfg.Auth, "vk-creds-file": labCfg.CredsFile, "go-dns": labCfg.DNS, "device-id": labCfg.Device, "n": fmt.Sprint(labCfg.Workers), "mode": "vpn"}
+	mode := labCfg.Mode
+	if mode == "" {
+		mode = "vpn"
+	}
+	values := map[string]string{"peer": labCfg.Peer, "listen": labCfg.Listen, "password": labCfg.Password, "vk": labCfg.VK, "vk-auth": labCfg.Auth, "vk-creds-file": labCfg.CredsFile, "go-dns": labCfg.DNS, "device-id": labCfg.Device, "n": fmt.Sprint(labCfg.Workers), "mode": mode}
+	if mode == "socks" {
+		values["socks"] = labCfg.SocksListen
+	}
 	for k, v := range values {
 		if flag.Set(k, v) != nil {
 			os.Exit(78)
@@ -180,6 +234,19 @@ func labValidate(c labConfig) error {
 	if c.Auth != "account" && c.Auth != "anonymous" {
 		return labErr
 	}
+	switch c.Mode {
+	case "", "vpn":
+		if c.SocksListen != "" {
+			return labErr
+		}
+	case "socks":
+		// Local owner-only TCP SOCKS5; no LAN exposure or arbitrary listener.
+		if c.SocksListen != "127.0.0.1:1081" {
+			return labErr
+		}
+	default:
+		return labErr
+	}
 	if c.Auth == "account" && (c.Workers < 1 || c.Workers > 4) {
 		return labErr
 	}
@@ -196,7 +263,7 @@ func main() {
 		os.Exit(qImportCLI(os.Args[2:], os.Stdout, os.Stderr))
 	}
 	if len(os.Args) == 2 && (os.Args[1] == "-h" || os.Args[1] == "--help") {
-		fmt.Println("wt-client laboratory vpn-only profile: -config-file /absolute/private/config.json; no AWG daemon; secrets via 0600 file in 0700 directory; maximum session 30 minutes")
+		fmt.Println("wt-client owner laboratory profile: -config-file /absolute/private/config.json; mode vpn or loopback-only socks (127.0.0.1:1081); no AWG daemon; secrets via 0600 file in 0700 directory; maximum session 30 minutes")
 		return
 	}
 	if len(os.Args) != 3 || os.Args[1] != "-config-file" {
@@ -229,6 +296,9 @@ func main() {
 	os.Args = os.Args[:1]
 	labStatus("STARTING")
 	labGetConfStatus("NOT_REQUESTED")
+	if labCfg.Mode == "socks" {
+		labSocksStatus("WAITING_FOR_WG")
+	}
 	if labWrite("transport-ready", []byte("STARTING\n")) != nil {
 		os.Exit(78)
 	}

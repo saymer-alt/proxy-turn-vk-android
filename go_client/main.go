@@ -412,15 +412,23 @@ func upstreamMain() {
 			labGetConfStatus("CONFIG_READY")
 
 			if activeConnMode == "socks" {
+				labSocksStatus("WG_STARTING")
+				parsed, parseErr := parseWgQuick(finalConf)
+				if parseErr != nil || !labValidateSocksWG(parsed) {
+					labSocksStatus("WG_CONFIG_REJECTED")
+					os.Exit(78)
+				}
 				dev, tnet, err := startUserspaceWireGuard(finalConf)
 				if err != nil {
-					log.Printf("[SOCKS] Ошибка userspace WG: %v", err)
-					return
+					labSocksStatus("WG_START_FAILED")
+					os.Exit(78)
 				}
 				defer dev.Close()
 				if err := runSocks5Server(ctx, *socksAddr, tnet); err != nil {
-					log.Printf("[SOCKS] Сервер остановлен: %v", err)
+					labSocksStatus("SOCKS_SERVER_FAILED")
+					os.Exit(78)
 				}
+				labSocksStatus("SOCKS_STOPPED")
 			}
 		case <-ctx.Done():
 		}

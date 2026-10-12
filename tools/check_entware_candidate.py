@@ -24,10 +24,12 @@ def main():
  # Every modified client source has an exact Git blob pin; the remaining
  # Phase4 source equivalence guard below is still enforced unchanged.
  diagnostic_blobs={
-  'go_client/main.go':'e9e1a17294d998d15864676791a3d19389296726',
-  'go_client/lab_security.go':'2e3bd4e4c45d69d5d6c72b2addff1e255c4d43ac',
+  'go_client/main.go':'68b01a273d6d6bf90a15bba747158760370131fc',
+  'go_client/lab_security.go':'fd01953c27548f9a9dc2ba706913f913caf1aa1d',
   'go_client/session.go':'81febbe4125d585eb8d9db35b43117597ce70228',
   'go_client/lab_getconf_status_test.go':'53e1fc751237d11555c1b64506a643bba0e956a5',
+  'go_client/socks5.go':'f564de47b5b8a7d78ff283cae9691c0c590cdf21',
+  'go_client/lab_socks_mode_test.go':'70e555096897d2b672b3d9e39828cc64088a6311',
  }
  for name,blob in diagnostic_blobs.items():
   assert run(['git','-C',ROOT,'hash-object',name])==blob,'UNREVIEWED_DIAGNOSTIC_SOURCE_CHANGE: '+name
@@ -68,7 +70,7 @@ def main():
  replacement+="    assert external(old)==external(new), 'THIRD_PARTY_SOURCE_CHANGED'\n"
  replacement+="    prefix=lambda path:path.read_text().split('===== SELECTED SOURCE COPYRIGHT HEADERS =====')[0]\n"
  replacement+="    assert prefix(work.parent/'base-inventory/NOTICE-COLLECTION.txt')==prefix(work/'license-evidence/NOTICE-COLLECTION.txt'), 'LICENSE_TEXT_CHANGED'\n"
- replacement+="    report['candidate_comparison']={'client_sha256_before':baseline['client_sha256'],'client_sha256_after':expected,'independent_candidate_rebuild_identical':True,'relay_identical':True,'third_party_sources_and_notices_identical':True,'local_source_inventory_changed':True,'reason':'explicit qWDTT importer plus SHA-pinned fixed-code GETCONF lab diagnostics; local source inventory changed without dependency, wire protocol or worker-limit changes'}\n"
+ replacement+="    report['candidate_comparison']={'client_sha256_before':baseline['client_sha256'],'client_sha256_after':expected,'independent_candidate_rebuild_identical':True,'relay_identical':True,'third_party_sources_and_notices_identical':True,'local_source_inventory_changed':True,'reason':'explicit qWDTT importer plus SHA-pinned GETCONF and fixed-loopback SOCKS lab diagnostics; local source inventory changed without dependency, wire protocol or worker-limit changes'}\n"
  build.write_text(text[:start]+replacement+text[end:])
  built=work/'build'
  run(['python3',build,'--go',go,'--sdk-archive',pathlib.Path(a.sdk).resolve(),'--work',built,'--source',ROOT,'--cache',work/'gocache','--modules',work/'gopath'])
