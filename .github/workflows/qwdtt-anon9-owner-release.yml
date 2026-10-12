@@ -1,0 +1,86 @@
+name: WDTT qWDTT anonymous9 owner-lab MIPSel prerelease
+on:
+  push:
+    branches: [feature/qwdtt-anonymous9-owner-20261012]
+    paths: ['.github/workflows/qwdtt-anon9-owner-release.yml']
+permissions:
+  contents: write
+concurrency:
+  group: qwdtt-anon9-owner-release
+  cancel-in-progress: false
+jobs:
+  accepted-owner-mipsel-only:
+    if: github.repository == 'saymer-alt/proxy-turn-vk-android'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: saymer-alt/proxy-turn-vk-android
+    steps:
+      - name: Checkout exact isolated SOCKS owner-lab candidate
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          path: candidate
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Checkout pinned Entware acceptance
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: saymer-alt/entware-go
+          ref: beb7e12c61deba465cdccfac77c8bb41ab0df89c
+          path: entware-ci
+          persist-credentials: false
+      - name: Checkout pinned KAS read-only lifecycle
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: saymer-alt/keenetic-auto-setup
+          ref: 7c01e29c0ef278532e083a0d6868cfef4d2ca003
+          path: kas-ci
+          persist-credentials: false
+      - name: Acquire pinned SDK and native fixture dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y qemu-user zstd busybox cmake make pkg-config libjson-c-dev shellcheck
+          curl -fL --retry 2 https://github.com/ownik/entware-sdk/releases/download/v2026.07.04/entware-sdk-aarch64-3.10_gcc-8.4.0_glibc-2.27.Linux-x86_64.tar.zst -o sdk.tar.zst
+          echo 'd51f30c126425ebff203b107a1a0aa9d3a5844f6c481bc6ff4c117cadc208674  sdk.tar.zst' | sha256sum -c -
+          mkdir sdk-root
+          tar --zstd -xf sdk.tar.zst -C sdk-root --wildcards --wildcards-match-slash '*staging_dir/host/go/*'
+      - name: Enforce full bounded CI, source hashes, both architectures and local pair
+        run: |
+          set -euo pipefail
+          go_bin="$(find sdk-root -type f -path '*/host/go/bin/go' -print -quit)"
+          test -n "$go_bin"
+          python3 candidate/tools/check_entware_candidate.py --go "$go_bin" --sdk sdk.tar.zst --entware entware-ci --kas kas-ci --work candidate-work
+      - name: Publish standalone MIPSel ELF and checksum as immutable nonlatest prerelease
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/feature/qwdtt-anonymous9-owner-20261012'
+          test "$(git -C candidate rev-parse HEAD)" = "$GITHUB_SHA"
+          test -s candidate-work/build/wt-client-linux-mipsle
+          mkdir -m 700 -p owner-lab
+          cp candidate-work/build/wt-client-linux-mipsle owner-lab/wt-client-linux-mipsle
+          file owner-lab/wt-client-linux-mipsle | grep -q 'MIPS'
+          (cd owner-lab && sha256sum wt-client-linux-mipsle > SHA256SUMS && sha256sum -c SHA256SUMS)
+          printf 'SOURCE_COMMIT=%s\nOWNER_LAB_ONLY=true\nPROXY_MODE=SOCKS_TCP_UDP\nQWDTT_IMPORT=ANONYMOUS_SINGLE_HASH9_ONLY\nSUPPORTED_KAS_WDTT_256MB=false\n' "$GITHUB_SHA" > owner-lab/BUILD-INFO.txt
+          tag="wdtt-owner-lab-qwdtt9-$(printf '%s' "$GITHUB_SHA" | cut -c1-12)"
+          if gh release view "$tag" --repo "$GH_REPO" >/dev/null 2>&1; then
+            echo "Release tag already exists; refusing overwrite"
+            exit 1
+          fi
+          cat > owner-lab/RELEASE-NOTES.md <<'NOTES'
+          Owner-only experimental MIPSel WDTT client with one-hash qWDTT anonymous 9-worker offline import and TCP CONNECT plus UDP ASSOCIATE SOCKS5 on 127.0.0.1:1081.
+          Opt-in secure private JSON mode; UDP framing/echo acceptance through WireGuard userspace; no public VK or Keenetic UDP field proof. WireGuard uses in-process
+          netstack and local WDTT UDP endpoint, never OS TUN/default route.
+          Built from exact owner-lab feature SHA after source-locked
+          Entware/KAS/local-pair acceptance; binary/manifest SHA256SUMS.
+          No public VK credentials/profiles are bundled. No OPKG IPK/production feed, no startup integration, no latest/stable modification.
+          KN-1010 256MB is unsupported standalone lab only; KAS+WDTT min 512MB unchanged.
+          Not proof of public VK provider actual TCP egress, DNS behavior, or WAN no-leak.
+          NOTES
+          gh release create "$tag" \
+            owner-lab/wt-client-linux-mipsle owner-lab/SHA256SUMS owner-lab/BUILD-INFO.txt \
+            --repo "$GH_REPO" --target "$GITHUB_SHA" \
+            --title "WDTT qWDTT anonymous9 TCP+UDP MIPSel owner lab ($(printf '%s' "$GITHUB_SHA" | cut -c1-12))" \
+            --notes-file owner-lab/RELEASE-NOTES.md --prerelease --latest=false
+          gh release view "$tag" --repo "$GH_REPO" --json url,tagName,isPrerelease,assets --jq '{url,tagName,isPrerelease,assets:[.assets[].name]}'

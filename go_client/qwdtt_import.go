@@ -210,30 +210,43 @@ func qParse(raw []byte, o qOptions, availableKiB int64) (labConfig, string, erro
 	if !qText(o.Device, 128) || strings.Contains(o.Device, "|") {
 		return reject("DEVICE_INVALID")
 	}
-	if o.Auth == "anonymous" {
-		return reject("ANONYMOUS_WORKER_POLICY_UNRESOLVED")
-	}
-	if o.Auth != "account" {
-		return reject("AUTH_INVALID")
-	}
-	if o.Credentials == "" {
-		return reject("CREDENTIALS_REQUIRED")
-	}
 	customDNS := strings.TrimPrefix(o.DNS, "custom:")
 	validCustomDNS := strings.HasPrefix(o.DNS, "custom:") && net.ParseIP(customDNS) != nil && net.ParseIP(customDNS).To4() != nil
 	if o.DNS != "yandex" && o.DNS != "doh-cloudflare" && o.DNS != "doh-google" && !validCustomDNS {
 		return reject("DNS_CHOICE_REQUIRED")
 	}
-	if workers > 4 || o.MaxWorkers < 1 || o.MaxWorkers > 4 || workers > o.MaxWorkers {
-		return reject("WORKER_BUDGET_EXCEEDED")
-	}
-	// Keep a conservative reserve; import is admission assistance, not load/RSS proof.
-	if availableKiB < 98304+int64(workers-1)*16384 {
-		return reject("DEVICE_MEMORY_INSUFFICIENT")
-	}
 	hashes := strings.Split(values.Get("hashes"), ",")
 	if len(hashes) == 0 || len(hashes) > workers {
 		return reject("HASH_WORKER_BUDGET_EXCEEDED")
+	}
+	// The existing anonymous client launches 9 effective TURN sessions
+	// from its historical -n 12 profile (one workersPerGroup=9 group).
+	// A public qwdtt://workers=9 is admitted ONLY for a single hash,
+	// explicitly authorized with max-workers=9 and >=128MiB available.
+	// 16/18 and multiple hashes are NOT silently downscaled. Account
+	// quota (<=4) and client protocol are completely unchanged.
+	runtimeWorkers := workers
+	switch o.Auth {
+	case "account":
+		if o.Credentials == "" {
+			return reject("CREDENTIALS_REQUIRED")
+		}
+		if workers > 4 || o.MaxWorkers < 1 || o.MaxWorkers > 4 || workers > o.MaxWorkers {
+			return reject("WORKER_BUDGET_EXCEEDED")
+		}
+		if availableKiB < 98304+int64(workers-1)*16384 {
+			return reject("DEVICE_MEMORY_INSUFFICIENT")
+		}
+	case "anonymous":
+		if workers != 9 || len(hashes) != 1 || o.MaxWorkers != 9 || o.Credentials != "" {
+			return reject("ANONYMOUS_WORKER_POLICY_UNRESOLVED")
+		}
+		if availableKiB < 131072 {
+			return reject("DEVICE_MEMORY_INSUFFICIENT")
+		}
+		runtimeWorkers = 12 // runtime's already field-tested effective=9.
+	default:
+		return reject("AUTH_INVALID")
 	}
 	seen := map[string]bool{}
 	for i, h := range hashes {
@@ -253,7 +266,7 @@ func qParse(raw []byte, o qOptions, availableKiB int64) (labConfig, string, erro
 	if len(pass) < 16 || len(pass) > 1024 || strings.Contains(pass, "|") {
 		return reject("PASSWORD_INVALID")
 	}
-	c = labConfig{Peer: peer, Listen: fmt.Sprintf("127.0.0.1:%d", local), Password: pass, VK: strings.Join(hashes, ","), Auth: o.Auth, CredsFile: o.Credentials, DNS: o.DNS, Workers: workers, Device: o.Device}
+	c = labConfig{Peer: peer, Listen: fmt.Sprintf("127.0.0.1:%d", local), Password: pass, VK: strings.Join(hashes, ","), Auth: o.Auth, CredsFile: o.Credentials, DNS: o.DNS, Workers: runtimeWorkers, Device: o.Device}
 	if labValidate(c) != nil {
 		return reject("CLIENT_POLICY_REJECTED")
 	}
@@ -295,18 +308,20 @@ func qImport(o qOptions) error {
 	if e != nil {
 		return e
 	}
-	creds, e := qRead(c.CredsFile)
-	if e != nil {
-		return qError("PRIVATE_CREDENTIALS_REQUIRED")
-	}
-	var cf vkCredsFile
-	if json.Unmarshal(creds, &cf) != nil {
-		return qError("CREDENTIALS_INVALID")
-	}
-	for _, h := range ParseHashes(c.VK) {
-		v, ok := cf.Hashes[h]
-		if !ok || v.User == "" || v.Pass == "" || len(turnURLsToAddresses(v.URLs)) == 0 {
-			return qError("CREDENTIALS_MISSING_HASH")
+	if c.Auth == "account" {
+		creds, e := qRead(c.CredsFile)
+		if e != nil {
+			return qError("PRIVATE_CREDENTIALS_REQUIRED")
+		}
+		var cf vkCredsFile
+		if json.Unmarshal(creds, &cf) != nil {
+			return qError("CREDENTIALS_INVALID")
+		}
+		for _, h := range ParseHashes(c.VK) {
+			v, ok := cf.Hashes[h]
+			if !ok || v.User == "" || v.Pass == "" || len(turnURLsToAddresses(v.URLs)) == 0 {
+				return qError("CREDENTIALS_MISSING_HASH")
+			}
 		}
 	}
 	addr, e := net.ResolveUDPAddr("udp4", c.Listen)
@@ -328,6 +343,10 @@ func qImport(o qOptions) error {
 	var obj map[string]interface{}
 	json.Unmarshal(data, &obj)
 	obj["name"] = name
+	if c.Auth == "anonymous" {
+		obj["qwdtt_requested_workers"] = 9
+		obj["qwdtt_effective_workers"] = 9
+	}
 	data, e = json.MarshalIndent(obj, "", "  ")
 	if e != nil {
 		return qError("OUTPUT_REJECTED")
@@ -336,7 +355,7 @@ func qImport(o qOptions) error {
 }
 func qImportCLI(args []string, out, errOut io.Writer) int {
 	if len(args) == 1 && (args[0] == "-h" || args[0] == "--help") {
-		fmt.Fprintln(out, "qWDTT offline import: -uri-file PRIVATE0600 -output-file NEW_PRIVATE0600 -auth account -device EXPLICIT_ID -credentials-file PRIVATE0600 -max-workers 1..4 -dns EXPLICIT_CHOICE; parent directories0700; no secret argv, no connection")
+		fmt.Fprintln(out, "qWDTT offline import: -uri-file PRIVATE0600 -output-file NEW_PRIVATE0600 -auth account -credentials-file PRIVATE0600 -max-workers 1..4 OR -auth anonymous -max-workers 9 (single hash); -device EXPLICIT_ID -dns EXPLICIT_CHOICE; parent directories0700; no secret argv, no connection")
 		return 0
 	}
 	if unix.Setrlimit(unix.RLIMIT_CORE, &unix.Rlimit{}) != nil {

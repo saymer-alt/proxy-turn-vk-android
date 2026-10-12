@@ -30,6 +30,8 @@ def main():
   'go_client/lab_getconf_status_test.go':'53e1fc751237d11555c1b64506a643bba0e956a5',
   'go_client/socks5.go':'83dd16836debb08a58a8452e090a49d9b130acf8',
   'go_client/lab_socks_mode_test.go':'70e555096897d2b672b3d9e39828cc64088a6311',
+  'go_client/qwdtt_import.go':'f391b412686156fc7d5955a4f4f24b26382eddc6',
+  'go_client/qwdtt_anonymous9_test.go':'4ddd6f02ef56a9a4e4ce65200c2220f99f411919',
   'go_client/socks_service.go':'43c53996b0afebb7a34ed3d85e0165a6f3b7b5b8',
   'go_client/socks_udp_associate.go':'df71ad294b9afc6b1d004a10dae8a2b846313098',
   'go_client/socks_udp_associate_test.go':'831a65d2720dfab7cca8c4eb2800e6ed81f12551',
