@@ -25,3 +25,16 @@ func TestWDTTSocksTelemetryAggregateAndNoSecrets(t *testing.T) {
         if _,ok:=m[s];ok {t.Fatalf("forbidden diagnostic key %s",s)}
     }
 }
+
+func TestWDTTSocksLimitArm64HighMemOnly(t *testing.T) {
+    cases:=[]struct{arch string; kib int64; want int}{
+        {"arm64",0,32}, {"arm64",262143,32}, {"arm64",262144,64},
+        {"arm64",400000,64}, {"mipsle",900000,32},
+        {"mips",900000,32}, {"amd64",900000,32},
+    }
+    for _,c:=range cases {
+        if got:=wdttSocksLimitFor(c.arch,c.kib);got!=c.want {
+            t.Fatalf("arch %s available %d KiB: got %d want %d",c.arch,c.kib,got,c.want)
+        }
+    }
+}

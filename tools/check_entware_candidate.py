@@ -33,11 +33,11 @@ def main():
   'go_client/qwdtt_import.go':'a7fc4907066b82624f975b0a8d26c8eab2585e93',
   'go_client/qwdtt_anonymous9_test.go':'4ddd6f02ef56a9a4e4ce65200c2220f99f411919',
   'go_client/qwdtt_anonymous16_18_test.go':'082009c877b01d87c7a1902dcc6c7c97a75d23bc',
-  'go_client/socks_service.go':'e0de4e51582d1334a6dc9a349c07a67be522b72f',
+  'go_client/socks_service.go':'257816f247a5ea2443ffb4fc0482f71fa333da24',
   'go_client/socks_udp_associate.go':'82ca1cbdab7a9067c49ae2a548baf56d54b932c2',
   'go_client/socks_udp_associate_test.go':'831a65d2720dfab7cca8c4eb2800e6ed81f12551',
-  'go_client/socks_telemetry.go':'1cb30d626fe470e2afb4099d82ab94918329252d',
-  'go_client/socks_telemetry_test.go':'841b05b60039cf2f233d64df7b85b1df41dea13d',
+  'go_client/socks_telemetry.go':'43d2c03e2ce7705ced3722abf968531839fce00f',
+  'go_client/socks_telemetry_test.go':'a85ee0e2db930cf0eb47836ef6d1863ac745a286',
   'hardened-relay/server_pair_fixture_test.go':'2c29f2276dcc699bc2b9863e995b712a572d460c',
   'tools/check_socks_udp_pair.py':'2523ec173a79f16c4f697015024dcab67e893142',
  }
@@ -80,7 +80,7 @@ def main():
  replacement+="    assert external(old)==external(new), 'THIRD_PARTY_SOURCE_CHANGED'\n"
  replacement+="    prefix=lambda path:path.read_text().split('===== SELECTED SOURCE COPYRIGHT HEADERS =====')[0]\n"
  replacement+="    assert prefix(work.parent/'base-inventory/NOTICE-COLLECTION.txt')==prefix(work/'license-evidence/NOTICE-COLLECTION.txt'), 'LICENSE_TEXT_CHANGED'\n"
- replacement+="    report['candidate_comparison']={'client_sha256_before':baseline['client_sha256'],'client_sha256_after':expected,'independent_candidate_rebuild_identical':True,'relay_identical':True,'third_party_sources_and_notices_identical':True,'local_source_inventory_changed':True,'reason':'explicit qWDTT and fixed-loopback SOCKS5 TCP/UDP plus aggregate-only owner telemetry; all client changes SHA-pinned; remote wire protocol and limits unchanged'}\n"
+ replacement+="    report['candidate_comparison']={'client_sha256_before':baseline['client_sha256'],'client_sha256_after':expected,'independent_candidate_rebuild_identical':True,'relay_identical':True,'third_party_sources_and_notices_identical':True,'local_source_inventory_changed':True,'reason':'explicit qWDTT and fixed-loopback SOCKS5 TCP/UDP plus aggregate-only owner telemetry; ARM64 >=256MiB available gets 64 SOCKS admission slots, MIPSel remains 32; all source SHA-pinned and remote wire protocol unchanged'}\n"
  build.write_text(text[:start]+replacement+text[end:])
  built=work/'build'
  run(['python3',build,'--go',go,'--sdk-archive',pathlib.Path(a.sdk).resolve(),'--work',built,'--source',ROOT,'--cache',work/'gocache','--modules',work/'gopath'])

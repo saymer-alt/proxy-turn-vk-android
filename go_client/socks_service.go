@@ -11,6 +11,7 @@ import (
     "io"
     "net"
     "net/netip"
+    "runtime"
     "strings"
     "sync"
     "time"
@@ -20,10 +21,22 @@ import (
 
 const (
     wdttMaxSOCKSClients = 32
+    wdttArm64HighMemSOCKSClients = 64
+    wdttArm64HighMemFloorKiB = 262144
     wdttMaxUDPAssociations = 4
     wdttMaxUDPPayload = 2048
     wdttMaxUDPFrame = 2304
 )
+
+// Prefer the accepted 32-client owner-lab limit on MIPSel/low-memory boxes.
+// Only ARM64 with >=256 MiB available memory may opt into a 64-slot admission test.
+// Capacity is decided once per listener start; no runtime auto-expansion.
+func wdttSocksLimitFor(arch string, availableKiB int64) int {
+    if arch == "arm64" && availableKiB >= wdttArm64HighMemFloorKiB {
+        return wdttArm64HighMemSOCKSClients
+    }
+    return wdttMaxSOCKSClients
+}
 
 type wdttSocksTarget struct {
     host string
@@ -160,13 +173,15 @@ func runSocks5Server(ctx context.Context, listenAddr string, tnet *netstack.Net)
         return fmt.Errorf("SOCKS loopback bind: %w",err)
     }
     defer ln.Close()
+    capacity:=wdttSocksLimitFor(runtime.GOARCH,qMemory())
+    wdttTelemetry.socksLimit.Store(int64(capacity))
     labSocksStatus("SOCKS_LISTENING")
     stopTelemetry:=wdttStartTelemetry(ctx)
     defer stopTelemetry()
     closeOnCancel:=context.AfterFunc(ctx,func(){ _=ln.Close() })
     defer closeOnCancel()
 
-    clients:=make(chan struct{},wdttMaxSOCKSClients)
+    clients:=make(chan struct{},capacity)
     udpSessions:=make(chan struct{},wdttMaxUDPAssociations)
     var wg sync.WaitGroup
     defer wg.Wait()

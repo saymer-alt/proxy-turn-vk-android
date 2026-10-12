@@ -12,6 +12,7 @@ import (
 )
 
 type wdttCounters struct {
+    socksLimit atomic.Int64
     socksAccepted atomic.Uint64
     socksActive atomic.Int64
     socksPeak atomic.Int64
@@ -58,6 +59,7 @@ func wdttTelemetrySnapshot() []byte {
     info:=map[string]any{
         "schema":1,
         "uptime_seconds":int64(time.Since(wdttTelemetryStart).Seconds()),
+        "socks_limit_configured":wdttTelemetry.socksLimit.Load(),
         "socks_accepted":wdttTelemetry.socksAccepted.Load(),
         "socks_active":wdttTelemetry.socksActive.Load(),
         "socks_peak":wdttTelemetry.socksPeak.Load(),

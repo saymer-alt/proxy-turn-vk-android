@@ -1,0 +1,93 @@
+name: WDTT owner-only ARM64 64-slot A/B + MIPSel 32-slot prerelease
+on:
+  push:
+    branches: [feature/wdtt-arm64-64slots-owner-20261012]
+    paths: ['.github/workflows/wdtt-arm64-64slots-owner-release.yml']
+permissions:
+  contents: write
+concurrency:
+  group: wdtt-arm64-64slots-owner-release
+  cancel-in-progress: false
+jobs:
+  accepted-owner-dual-arch-only:
+    if: github.repository == 'saymer-alt/proxy-turn-vk-android'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: saymer-alt/proxy-turn-vk-android
+    steps:
+      - name: Checkout exact isolated SOCKS owner-lab candidate
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          path: candidate
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Checkout pinned Entware acceptance
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: saymer-alt/entware-go
+          ref: beb7e12c61deba465cdccfac77c8bb41ab0df89c
+          path: entware-ci
+          persist-credentials: false
+      - name: Checkout pinned KAS read-only lifecycle
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: saymer-alt/keenetic-auto-setup
+          ref: 7c01e29c0ef278532e083a0d6868cfef4d2ca003
+          path: kas-ci
+          persist-credentials: false
+      - name: Acquire pinned SDK and native fixture dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y qemu-user zstd busybox cmake make pkg-config libjson-c-dev shellcheck
+          curl -fL --retry 2 https://github.com/ownik/entware-sdk/releases/download/v2026.07.04/entware-sdk-aarch64-3.10_gcc-8.4.0_glibc-2.27.Linux-x86_64.tar.zst -o sdk.tar.zst
+          echo 'd51f30c126425ebff203b107a1a0aa9d3a5844f6c481bc6ff4c117cadc208674  sdk.tar.zst' | sha256sum -c -
+          mkdir sdk-root
+          tar --zstd -xf sdk.tar.zst -C sdk-root --wildcards --wildcards-match-slash '*staging_dir/host/go/*'
+      - name: Enforce full bounded CI, source hashes, both architectures and local pair
+        run: |
+          set -euo pipefail
+          go_bin="$(find sdk-root -type f -path '*/host/go/bin/go' -print -quit)"
+          test -n "$go_bin"
+          python3 candidate/tools/check_entware_candidate.py --go "$go_bin" --sdk sdk.tar.zst --entware entware-ci --kas kas-ci --work candidate-work
+      - name: Publish exact SHA-pinned, owner-only MIPSel + ARM64 prerelease
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/feature/wdtt-arm64-64slots-owner-20261012'
+          test "$(git -C candidate rev-parse HEAD)" = "$GITHUB_SHA"
+          test -s candidate-work/direct-client-arm64
+          test -s candidate-work/build/wt-client-linux-mipsle
+          mkdir -m 700 -p owner-lab
+          cp candidate-work/direct-client-arm64 owner-lab/wt-client-linux-arm64
+          cp candidate-work/build/wt-client-linux-mipsle owner-lab/wt-client-linux-mipsle
+          file owner-lab/wt-client-linux-arm64 | grep -Eq 'ARM aarch64|aarch64'
+          file owner-lab/wt-client-linux-mipsle | grep -q 'MIPS'
+          (cd owner-lab && sha256sum wt-client-linux-arm64 wt-client-linux-mipsle > SHA256SUMS && sha256sum -c SHA256SUMS)
+          printf 'SOURCE_COMMIT=%s\nOWNER_LAB_ONLY=true\nTARGETS=linux_arm64,linux_mipsle\nTELEMETRY=socks-telemetry.json\nSAMPLE_SECONDS=10\nSOCKS_LIMIT=ARM64_HIMEM_64_MIPSEL_32\nQWDTT_IMPORT=ANONYMOUS_EXACT_9_16_18_LAB_ONLY\nSUPPORTED_KAS_WDTT_256MB=false\n' "$GITHUB_SHA" > owner-lab/BUILD-INFO.txt
+          tag="wdtt-owner-lab-arm64-64slots-$(printf '%s' "$GITHUB_SHA" | cut -c1-12)"
+          if gh release view "$tag" --repo "$GH_REPO" >/dev/null 2>&1; then
+            echo "Release tag already exists; refusing overwrite"
+            exit 1
+          fi
+          cat > owner-lab/RELEASE-NOTES.md <<'NOTES'
+          Owner-only A/B diagnostics for ARM64 NC-1812 and standalone MIPSel KN-1010 lab.\n          ARM64 client admission limit 64 only if MemAvailable >=256MiB; otherwise 32.\n          MIPSel and all non-ARM64 clients remain 32 slots; UDP associations remain 4.
+          Source-locked Entware/KAS/native-fixture tests must PASS before publication.
+          Private 0600 socks-telemetry.json in pre-existing 0700 profile directory, 10s snapshots.
+          Counters for SOCKS TCP requests/failures, UDP ASSOCIATE, UDP ingress,
+          netstack writes, replies to proxy, rejected packets, active sessions,
+          goroutine/heap stats. Never logs credentials, site names, endpoints or payload.
+          Counters do not prove remote delivery; corroborate with field measurements.
+          No automatic startup, router policy changes, KAS acceptance changes, or
+          stable/main, latest feed or production package modification.
+          KN-1010 256MB remains strictly owner-only unsupported standalone testing;
+          official KAS+WDTT 512MB floor unchanged.
+          NOTES
+          gh release create "$tag" \
+            owner-lab/wt-client-linux-arm64 owner-lab/wt-client-linux-mipsle \
+            owner-lab/SHA256SUMS owner-lab/BUILD-INFO.txt \
+            --repo "$GH_REPO" --target "$GITHUB_SHA" \
+            --title "WDTT ARM64 high-memory 64-slot A/B and MIPSel 32-slot diagnostics ($(printf '%s' "$GITHUB_SHA" | cut -c1-12))" \
+            --notes-file owner-lab/RELEASE-NOTES.md --prerelease --latest=false
+          gh release view "$tag" --repo "$GH_REPO" --json url,tagName,isPrerelease,assets --jq '{url,tagName,isPrerelease,assets:[.assets[].name]}'
