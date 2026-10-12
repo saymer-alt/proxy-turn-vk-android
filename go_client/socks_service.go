@@ -118,20 +118,24 @@ func wdttSocksHandshake(c net.Conn) (byte,wdttSocksTarget,error) {
 }
 
 func wdttTCPConnect(ctx context.Context, c net.Conn, tnet *netstack.Net, target wdttSocksTarget) {
+    wdttTelemetry.tcpRequested.Add(1)
     dialCtx,cancel:=context.WithTimeout(ctx,10*time.Second)
     addr,err:=wdttResolveIPv4(dialCtx,tnet,target)
     if err!=nil {
         cancel()
+        wdttTelemetry.tcpResolveFailed.Add(1)
         _=wdttSocksReply(c,4,nil,0)
         return
     }
     remote,err:=tnet.DialContext(dialCtx,"tcp",addr.String())
     cancel()
     if err!=nil {
+        wdttTelemetry.tcpDialFailed.Add(1)
         _=wdttSocksReply(c,4,nil,0)
         return
     }
     defer remote.Close()
+    wdttTelemetry.tcpConnected.Add(1)
     if wdttSocksReply(c,0,nil,0)!=nil { return }
     _=c.SetDeadline(time.Now().Add(3*time.Minute))
     done:=make(chan struct{},2)
@@ -157,6 +161,8 @@ func runSocks5Server(ctx context.Context, listenAddr string, tnet *netstack.Net)
     }
     defer ln.Close()
     labSocksStatus("SOCKS_LISTENING")
+    stopTelemetry:=wdttStartTelemetry(ctx)
+    defer stopTelemetry()
     closeOnCancel:=context.AfterFunc(ctx,func(){ _=ln.Close() })
     defer closeOnCancel()
 
@@ -170,9 +176,11 @@ func runSocks5Server(ctx context.Context, listenAddr string, tnet *netstack.Net)
             if ctx.Err()!=nil { return nil }
             return acceptErr
         }
+        wdttTelemetry.socksAccepted.Add(1)
         select {
         case clients<-struct{}{}:
         default:
+            wdttTelemetry.socksLimitRejected.Add(1)
             _=c.Close()
             continue
         }
@@ -180,12 +188,15 @@ func runSocks5Server(ctx context.Context, listenAddr string, tnet *netstack.Net)
         go func(){
             defer wg.Done()
             defer func(){<-clients}()
+            current:=wdttTelemetry.socksActive.Add(1)
+            wdttTelemetryPeak(&wdttTelemetry.socksPeak,current)
+            defer wdttTelemetry.socksActive.Add(-1)
             defer c.Close()
             stop:=context.AfterFunc(ctx,func(){_ = c.Close()})
             defer stop()
             _=c.SetDeadline(time.Now().Add(10*time.Second))
             command,target,err:=wdttSocksHandshake(c)
-            if err!=nil { return }
+            if err!=nil { wdttTelemetry.socksHandshakeFailed.Add(1); return }
             _=c.SetDeadline(time.Time{})
             switch command {
             case 1:
@@ -196,9 +207,11 @@ func runSocks5Server(ctx context.Context, listenAddr string, tnet *netstack.Net)
                     defer func(){<-udpSessions}()
                     wdttUDPAssociate(ctx,c,tnet,target)
                 default:
+                    wdttTelemetry.udpAssocLimitRejected.Add(1)
                     _=wdttSocksReply(c,1,nil,0)
                 }
             default:
+                wdttTelemetry.socksUnsupportedCmd.Add(1)
                 _=wdttSocksReply(c,7,nil,0)
             }
         }()

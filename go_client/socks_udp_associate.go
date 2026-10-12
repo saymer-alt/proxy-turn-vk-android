@@ -91,11 +91,13 @@ func (p *wdttUDPPeers) expected(addr *net.UDPAddr) bool {
 func wdttUDPAssociate(ctx context.Context, control net.Conn, tnet *netstack.Net, request wdttSocksTarget) {
     caller:=wdttClientIP(control)
     if caller==nil || !wdttIsUDPAssociateSource(request,caller) {
+        wdttTelemetry.udpAssocFailed.Add(1)
         _=wdttSocksReply(control,2,nil,0)
         return
     }
     inbound,err:=net.ListenUDP("udp4",&net.UDPAddr{IP:net.IPv4(127,0,0,1),Port:0})
     if err!=nil {
+        wdttTelemetry.udpAssocFailed.Add(1)
         _=wdttSocksReply(control,1,nil,0)
         return
     }
@@ -105,13 +107,18 @@ func wdttUDPAssociate(ctx context.Context, control net.Conn, tnet *netstack.Net,
     // not to the host kernel; there is deliberately no net.DialUDP fallback.
     outbound,err:=tnet.ListenUDP(&net.UDPAddr{IP:net.IPv4zero,Port:0})
     if err!=nil {
+        wdttTelemetry.udpAssocFailed.Add(1)
         _=wdttSocksReply(control,1,nil,0)
         return
     }
     defer outbound.Close()
 
     binding:=inbound.LocalAddr().(*net.UDPAddr)
-    if wdttSocksReply(control,0,net.IPv4(127,0,0,1),binding.Port)!=nil{return}
+    if wdttSocksReply(control,0,net.IPv4(127,0,0,1),binding.Port)!=nil { wdttTelemetry.udpAssocFailed.Add(1); return }
+    wdttTelemetry.udpAssocReady.Add(1)
+    active:=wdttTelemetry.udpAssocActive.Add(1)
+    wdttTelemetryPeak(&wdttTelemetry.udpAssocPeak,active)
+    defer wdttTelemetry.udpAssocActive.Add(-1)
     labUDPStatus("UDP_ASSOCIATE_READY")
 
     closed:=make(chan struct{})
@@ -135,12 +142,15 @@ func wdttUDPAssociate(ctx context.Context, control net.Conn, tnet *netstack.Net,
             n,src,err:=outbound.ReadFrom(buf)
             if err!=nil {return}
             remote,ok:=src.(*net.UDPAddr)
-            if !ok || n>wdttMaxUDPPayload || !peers.expected(remote){continue}
+            if !ok || n>wdttMaxUDPPayload || !peers.expected(remote){wdttTelemetry.udpRepliesRejected.Add(1);continue}
             target:=peers.source()
-            if target==nil{continue}
+            if target==nil{wdttTelemetry.udpRepliesRejected.Add(1);continue}
             wrapped,err:=wdttEncodeUDPReply(remote,buf[:n])
-            if err!=nil {continue}
-            _,_ = inbound.WriteToUDP(wrapped,target)
+            if err!=nil {wdttTelemetry.udpRepliesRejected.Add(1);continue}
+            if _,err=inbound.WriteToUDP(wrapped,target);err!=nil {wdttTelemetry.udpHostWriteFailed.Add(1)} else {
+                wdttTelemetry.udpRepliesDelivered.Add(1)
+                wdttTelemetry.udpReplyBytes.Add(uint64(n))
+            }
         }
     }()
     defer func(){
@@ -156,17 +166,20 @@ func wdttUDPAssociate(ctx context.Context, control net.Conn, tnet *netstack.Net,
         if err!=nil {
             if ctx.Err()!=nil {break}
             if te,ok:=err.(net.Error);ok && te.Timeout(){continue}
+            wdttTelemetry.udpHostReadFailed.Add(1)
             break
         }
-        if n>wdttMaxUDPFrame || !peers.setSource(src,caller,request.port) {continue}
+        if n>wdttMaxUDPFrame || !peers.setSource(src,caller,request.port) {wdttTelemetry.udpClientSourceRejected.Add(1);continue}
         target,data,err:=wdttDecodeUDPPacket(buf[:n])
-        if err!=nil {continue}
+        if err!=nil {wdttTelemetry.udpClientMalformed.Add(1);continue}
+        wdttTelemetry.udpClientValid.Add(1)
+        wdttTelemetry.udpClientBytes.Add(uint64(len(data)))
         lookupCtx,cancel:=context.WithTimeout(ctx,4*time.Second)
         addr,err:=wdttResolveIPv4(lookupCtx,tnet,target)
         cancel()
-        if err!=nil {continue}
+        if err!=nil {wdttTelemetry.udpResolveFailed.Add(1);continue}
         peers.mark(addr)
-        _,_ = outbound.WriteTo(data,addr)
+        if _,err=outbound.WriteTo(data,addr);err!=nil {wdttTelemetry.udpWGWriteFailed.Add(1)} else {wdttTelemetry.udpToWG.Add(1)}
     }
     // The control connection owns the association; close both packet sockets
     // when it disappears even if the process continues serving TCP.
