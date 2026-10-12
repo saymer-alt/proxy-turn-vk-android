@@ -32,6 +32,8 @@ type labConfig struct {
 	Device    string `json:"device"`
 	Mode      string `json:"mode"`
 	SocksListen string `json:"socks_listen"`
+	QWDTTRequestedWorkers int `json:"qwdtt_requested_workers,omitempty"`
+	QWDTTEffectiveWorkers int `json:"qwdtt_effective_workers,omitempty"`
 }
 
 var labCfg labConfig
@@ -265,8 +267,21 @@ func labValidate(c labConfig) error {
 	if c.Auth == "account" && (c.Workers < 1 || c.Workers > 4) {
 		return labErr
 	}
-	if c.Auth == "anonymous" && c.Workers != 12 {
-		return labErr
+	if c.Auth == "anonymous" {
+		hashCount := len(ParseHashes(c.VK))
+		switch {
+		case c.Workers == 12 && c.QWDTTRequestedWorkers == 0 && c.QWDTTEffectiveWorkers == 0:
+			// Legacy owner-lab anonymous request, still normalized to 9.
+		case c.Workers == 12 && c.QWDTTRequestedWorkers == 9 && c.QWDTTEffectiveWorkers == 9 && hashCount == 1:
+			// qWDTT single hash nine-worker translation.
+		case c.Workers == 16 && c.QWDTTRequestedWorkers == 16 && c.QWDTTEffectiveWorkers == 16 && hashCount == 1:
+			// Exact one-hash 9+7.
+		case c.Workers == 18 && c.QWDTTRequestedWorkers == 18 && c.QWDTTEffectiveWorkers == 18 && hashCount == 2:
+			// Exact two-hash 9+9.
+		default:
+			return labErr
+		}
+		if c.CredsFile != "" { return labErr }
 	}
 	if c.Auth == "account" && c.CredsFile == "" {
 		return labErr
@@ -293,6 +308,15 @@ func main() {
 	if json.Unmarshal(raw, &labCfg) != nil || labValidate(labCfg) != nil {
 		fmt.Fprintln(os.Stderr, "WDTT_LAB_CONFIG_INVALID")
 		os.Exit(78)
+	}
+	// Import-time RAM may differ from runtime: recheck before opening sockets.
+	if labCfg.Auth == "anonymous" && labCfg.QWDTTRequestedWorkers >= 16 {
+		minimum := int64(147456)
+		if labCfg.QWDTTRequestedWorkers == 18 { minimum = 155648 }
+		if qMemory() < minimum {
+			fmt.Fprintln(os.Stderr, "WDTT_QWDTT_RUNTIME_MEMORY_INSUFFICIENT")
+			os.Exit(78)
+		}
 	}
 	if labCfg.CredsFile != "" {
 		if _, err = labRead(labCfg.CredsFile); err != nil {

@@ -219,12 +219,13 @@ func qParse(raw []byte, o qOptions, availableKiB int64) (labConfig, string, erro
 	if len(hashes) == 0 || len(hashes) > workers {
 		return reject("HASH_WORKER_BUDGET_EXCEEDED")
 	}
-	// The existing anonymous client launches 9 effective TURN sessions
-	// from its historical -n 12 profile (one workersPerGroup=9 group).
-	// A public qwdtt://workers=9 is admitted ONLY for a single hash,
-	// explicitly authorized with max-workers=9 and >=128MiB available.
-	// 16/18 and multiple hashes are NOT silently downscaled. Account
-	// quota (<=4) and client protocol are completely unchanged.
+	// Only explicitly supported anonymous field profiles are admitted.
+	// 9/one-hash maps to the field-proven old 12 -> effective9 path.
+	// 16/one-hash and 18/two-hashes require exact runtime group budgets
+	// of 9+7 and 9+9, respectively. A separate owner-only runtime flag
+	// bypasses truncation ONLY for these validated qWDTT configurations.
+	// Each variant requires exact operator max-workers consent and its
+	// own conservative available-RAM preflight. Account quota unchanged.
 	runtimeWorkers := workers
 	switch o.Auth {
 	case "account":
@@ -238,13 +239,22 @@ func qParse(raw []byte, o qOptions, availableKiB int64) (labConfig, string, erro
 			return reject("DEVICE_MEMORY_INSUFFICIENT")
 		}
 	case "anonymous":
-		if workers != 9 || len(hashes) != 1 || o.MaxWorkers != 9 || o.Credentials != "" {
+		if o.Credentials != "" || o.MaxWorkers != workers {
 			return reject("ANONYMOUS_WORKER_POLICY_UNRESOLVED")
 		}
-		if availableKiB < 131072 {
-			return reject("DEVICE_MEMORY_INSUFFICIENT")
+		switch {
+		case workers == 9 && len(hashes) == 1:
+			if availableKiB < 131072 { return reject("DEVICE_MEMORY_INSUFFICIENT") }
+			runtimeWorkers = 12 // legacy pinned runtime: 12 requested -> 9 effective.
+		case workers == 16 && len(hashes) == 1:
+			if availableKiB < 147456 { return reject("DEVICE_MEMORY_INSUFFICIENT") }
+			runtimeWorkers = 16 // exact 9+7 only in trusted lab variant.
+		case workers == 18 && len(hashes) == 2:
+			if availableKiB < 155648 { return reject("DEVICE_MEMORY_INSUFFICIENT") }
+			runtimeWorkers = 18 // exact 9+9, hashes alternate by group index.
+		default:
+			return reject("ANONYMOUS_WORKER_POLICY_UNRESOLVED")
 		}
-		runtimeWorkers = 12 // runtime's already field-tested effective=9.
 	default:
 		return reject("AUTH_INVALID")
 	}
@@ -267,6 +277,10 @@ func qParse(raw []byte, o qOptions, availableKiB int64) (labConfig, string, erro
 		return reject("PASSWORD_INVALID")
 	}
 	c = labConfig{Peer: peer, Listen: fmt.Sprintf("127.0.0.1:%d", local), Password: pass, VK: strings.Join(hashes, ","), Auth: o.Auth, CredsFile: o.Credentials, DNS: o.DNS, Workers: runtimeWorkers, Device: o.Device}
+	if c.Auth == "anonymous" {
+		c.QWDTTRequestedWorkers = workers
+		c.QWDTTEffectiveWorkers = workers
+	}
 	if labValidate(c) != nil {
 		return reject("CLIENT_POLICY_REJECTED")
 	}
@@ -343,10 +357,8 @@ func qImport(o qOptions) error {
 	var obj map[string]interface{}
 	json.Unmarshal(data, &obj)
 	obj["name"] = name
-	if c.Auth == "anonymous" {
-		obj["qwdtt_requested_workers"] = 9
-		obj["qwdtt_effective_workers"] = 9
-	}
+	// The private JSON already has explicit exact requested/effective
+	// metadata for qWDTT anonymous profiles (including 9->12/effective9).
 	data, e = json.MarshalIndent(obj, "", "  ")
 	if e != nil {
 		return qError("OUTPUT_REJECTED")
@@ -355,7 +367,7 @@ func qImport(o qOptions) error {
 }
 func qImportCLI(args []string, out, errOut io.Writer) int {
 	if len(args) == 1 && (args[0] == "-h" || args[0] == "--help") {
-		fmt.Fprintln(out, "qWDTT offline import: -uri-file PRIVATE0600 -output-file NEW_PRIVATE0600 -auth account -credentials-file PRIVATE0600 -max-workers 1..4 OR -auth anonymous -max-workers 9 (single hash); -device EXPLICIT_ID -dns EXPLICIT_CHOICE; parent directories0700; no secret argv, no connection")
+		fmt.Fprintln(out, "qWDTT offline import: -uri-file PRIVATE0600 -output-file NEW_PRIVATE0600 -auth account -credentials-file PRIVATE0600 -max-workers 1..4 OR -auth anonymous -max-workers 9 (1 hash) OR 16 (1 hash) OR 18 (2 hashes); -device EXPLICIT_ID -dns EXPLICIT_CHOICE; parent directories0700; no secret argv, no connection")
 		return 0
 	}
 	if unix.Setrlimit(unix.RLIMIT_CORE, &unix.Rlimit{}) != nil {

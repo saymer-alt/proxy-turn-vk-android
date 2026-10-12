@@ -106,6 +106,16 @@ func sanitizeHashCheckMessage(message string) string {
 	return message
 }
 
+// Pure budget calculation used only for explicitly annotated private
+// qWDTT16/18 configuration; 12->9 legacy and account behavior unchanged.
+func labAnonymousEffectiveWorkers(requested, exactPrivateQWDTT int) int {
+	if (exactPrivateQWDTT == 16 || exactPrivateQWDTT == 18) && requested == exactPrivateQWDTT {
+		return requested
+	}
+	if requested < workersPerGroup { return workersPerGroup }
+	return (requested / workersPerGroup) * workersPerGroup
+}
+
 func upstreamMain() {
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
 
@@ -257,10 +267,10 @@ func upstreamMain() {
 			*numW = 1
 		}
 	} else {
-		if *numW < workersPerGroup {
-			*numW = workersPerGroup
-		}
-		*numW = (*numW / workersPerGroup) * workersPerGroup
+		// Only validated owner-lab qWDTT16/18 import may retain a final
+		// partial worker group. Unannotated legacy anonymous modes keep
+		// exactly the same historical 9-worker floor behavior.
+		*numW = labAnonymousEffectiveWorkers(*numW, labCfg.QWDTTRequestedWorkers)
 	}
 
 	tp := &TurnParams{
