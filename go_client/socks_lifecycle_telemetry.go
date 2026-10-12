@@ -24,6 +24,10 @@ type wdttLifecycleCounters struct {
     tcpPeak atomic.Int64
     tcpCompleted atomic.Uint64
     tcpReplyFailed atomic.Uint64
+    tcpRelayClean atomic.Uint64
+    tcpRelayIdleClosed atomic.Uint64
+    tcpRelayCanceled atomic.Uint64
+    tcpRelayCopyError atomic.Uint64
     tcpLt10s atomic.Uint64
     tcp10to60s atomic.Uint64
     tcpGe60s atomic.Uint64
@@ -104,6 +108,10 @@ func wdttLifeAddSnapshot(m map[string]any) {
     m["tcp_peak"]=wdttLife.tcpPeak.Load()
     m["tcp_completed"]=wdttLife.tcpCompleted.Load()
     m["tcp_reply_failed"]=wdttLife.tcpReplyFailed.Load()
+    m["tcp_relay_clean_closed"]=wdttLife.tcpRelayClean.Load()
+    m["tcp_relay_idle_closed"]=wdttLife.tcpRelayIdleClosed.Load()
+    m["tcp_relay_context_canceled"]=wdttLife.tcpRelayCanceled.Load()
+    m["tcp_relay_copy_error_closed"]=wdttLife.tcpRelayCopyError.Load()
     m["tcp_duration_lt_10s"]=wdttLife.tcpLt10s.Load()
     m["tcp_duration_10_to_60s"]=wdttLife.tcp10to60s.Load()
     m["tcp_duration_ge_60s"]=wdttLife.tcpGe60s.Load()

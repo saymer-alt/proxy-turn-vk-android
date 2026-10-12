@@ -64,7 +64,7 @@ func TestWDTTOwnerLifecycleTelemetry(t *testing.T) {
     snap:=wdttTelemetrySnapshot()
     var metrics map[string]any
     if err:=json.Unmarshal(snap,&metrics);err!=nil {t.Fatal(err)}
-    for _,key:=range []string{"tcp_duration_ge_60s","tcp_client_to_remote_bytes","udp_control_eof","process_rss_kib","mem_available_kib","socks_handshake_active","udp_host_read_after_control_close"} {
+    for _,key:=range []string{"tcp_duration_ge_60s","tcp_relay_clean_closed","tcp_relay_idle_closed","tcp_relay_context_canceled","tcp_relay_copy_error_closed","tcp_client_to_remote_bytes","udp_control_eof","process_rss_kib","mem_available_kib","socks_handshake_active","udp_host_read_after_control_close"} {
         if _,ok:=metrics[key];!ok {t.Fatalf("missing %s",key)}
     }
     for _,key:=range []string{"peer","client_ip","remote_addr","target","password","udp_payload","vk_hash","hostname"} {

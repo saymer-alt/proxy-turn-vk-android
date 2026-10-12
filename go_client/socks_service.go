@@ -154,18 +154,7 @@ func wdttTCPConnect(ctx context.Context, c net.Conn, tnet *netstack.Net, target 
     active:=wdttLife.tcpActive.Add(1)
     wdttTelemetryPeak(&wdttLife.tcpPeak,active)
     defer func(){ wdttLife.tcpActive.Add(-1); wdttLife.tcpCompleted.Add(1); wdttLifeDuration(true,time.Since(started)) }()
-    _=c.SetDeadline(time.Now().Add(3*time.Minute))
-    done:=make(chan struct{},2)
-    transfer:=func(dst net.Conn,src net.Conn,toRemote bool){
-        n,err:=io.CopyBuffer(dst,src,make([]byte,16*1024))
-        wdttLifeTransfer(toRemote,n,err)
-        if cw,ok:=dst.(interface{CloseWrite() error});ok { _=cw.CloseWrite() }else{ _=dst.Close() }
-        done<-struct{}{}
-    }
-    go transfer(remote,c,true)
-    go transfer(c,remote,false)
-    <-done
-    <-done
+    wdttRelayTCP(ctx,c,remote,wdttTCPIdleTimeout)
 }
 
 // Serve only literal loopback; both existing SOCKS status codes and the
