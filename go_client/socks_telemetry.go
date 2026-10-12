@@ -57,7 +57,7 @@ func wdttTelemetrySnapshot() []byte {
     var m runtime.MemStats
     runtime.ReadMemStats(&m)
     info:=map[string]any{
-        "schema":1,
+        "schema":2,
         "uptime_seconds":int64(time.Since(wdttTelemetryStart).Seconds()),
         "socks_limit_configured":wdttTelemetry.socksLimit.Load(),
         "socks_accepted":wdttTelemetry.socksAccepted.Load(),
@@ -92,6 +92,7 @@ func wdttTelemetrySnapshot() []byte {
         "go_sys_bytes":m.Sys,
         "go_gc_count":m.NumGC,
     }
+    wdttLifeAddSnapshot(info)
     data,err:=json.MarshalIndent(info,"","  ")
     if err!=nil {return nil}
     return append(data,'\n')

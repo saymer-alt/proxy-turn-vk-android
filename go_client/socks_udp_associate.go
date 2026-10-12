@@ -9,6 +9,7 @@ import (
     "errors"
     "net"
     "sync"
+    "sync/atomic"
     "time"
 
     "golang.zx2c4.com/wireguard/tun/netstack"
@@ -116,18 +117,30 @@ func wdttUDPAssociate(ctx context.Context, control net.Conn, tnet *netstack.Net,
     binding:=inbound.LocalAddr().(*net.UDPAddr)
     if wdttSocksReply(control,0,net.IPv4(127,0,0,1),binding.Port)!=nil { wdttTelemetry.udpAssocFailed.Add(1); return }
     wdttTelemetry.udpAssocReady.Add(1)
+    started:=time.Now()
+    var clientPackets atomic.Uint64
+    defer func(){
+        wdttLife.udpCompleted.Add(1)
+        wdttLifeDuration(false,time.Since(started))
+        if clientPackets.Load()==0 {wdttLife.udpNoClientData.Add(1)}
+    }()
     active:=wdttTelemetry.udpAssocActive.Add(1)
     wdttTelemetryPeak(&wdttTelemetry.udpAssocPeak,active)
     defer wdttTelemetry.udpAssocActive.Add(-1)
     labUDPStatus("UDP_ASSOCIATE_READY")
 
     closed:=make(chan struct{})
+    var endedByControl atomic.Bool
     go func(){
         defer close(closed)
         var one [1]byte
         for {
-            if _,err:=control.Read(one[:]);err!=nil {break}
+            if _,err:=control.Read(one[:]);err!=nil {
+                wdttLifeUDPControlEnd(err)
+                break
+            }
         }
+        endedByControl.Store(true)
         _=inbound.Close()
         _=outbound.Close()
     }()
@@ -166,13 +179,19 @@ func wdttUDPAssociate(ctx context.Context, control net.Conn, tnet *netstack.Net,
         if err!=nil {
             if ctx.Err()!=nil {break}
             if te,ok:=err.(net.Error);ok && te.Timeout(){continue}
-            wdttTelemetry.udpHostReadFailed.Add(1)
+            if endedByControl.Load(){
+                wdttLife.udpHostReadAfterControlClose.Add(1)
+            } else {
+                wdttTelemetry.udpHostReadFailed.Add(1)
+                wdttLife.udpHostReadUnexpected.Add(1)
+            }
             break
         }
         if n>wdttMaxUDPFrame || !peers.setSource(src,caller,request.port) {wdttTelemetry.udpClientSourceRejected.Add(1);continue}
         target,data,err:=wdttDecodeUDPPacket(buf[:n])
         if err!=nil {wdttTelemetry.udpClientMalformed.Add(1);continue}
         wdttTelemetry.udpClientValid.Add(1)
+        clientPackets.Add(1)
         wdttTelemetry.udpClientBytes.Add(uint64(len(data)))
         lookupCtx,cancel:=context.WithTimeout(ctx,4*time.Second)
         addr,err:=wdttResolveIPv4(lookupCtx,tnet,target)

@@ -149,16 +149,21 @@ func wdttTCPConnect(ctx context.Context, c net.Conn, tnet *netstack.Net, target 
     }
     defer remote.Close()
     wdttTelemetry.tcpConnected.Add(1)
-    if wdttSocksReply(c,0,nil,0)!=nil { return }
+    if wdttSocksReply(c,0,nil,0)!=nil { wdttLife.tcpReplyFailed.Add(1); return }
+    started:=time.Now()
+    active:=wdttLife.tcpActive.Add(1)
+    wdttTelemetryPeak(&wdttLife.tcpPeak,active)
+    defer func(){ wdttLife.tcpActive.Add(-1); wdttLife.tcpCompleted.Add(1); wdttLifeDuration(true,time.Since(started)) }()
     _=c.SetDeadline(time.Now().Add(3*time.Minute))
     done:=make(chan struct{},2)
-    transfer:=func(dst net.Conn,src net.Conn){
-        _,_=io.CopyBuffer(dst,src,make([]byte,16*1024))
+    transfer:=func(dst net.Conn,src net.Conn,toRemote bool){
+        n,err:=io.CopyBuffer(dst,src,make([]byte,16*1024))
+        wdttLifeTransfer(toRemote,n,err)
         if cw,ok:=dst.(interface{CloseWrite() error});ok { _=cw.CloseWrite() }else{ _=dst.Close() }
         done<-struct{}{}
     }
-    go transfer(remote,c)
-    go transfer(c,remote)
+    go transfer(remote,c,true)
+    go transfer(c,remote,false)
     <-done
     <-done
 }
@@ -210,8 +215,11 @@ func runSocks5Server(ctx context.Context, listenAddr string, tnet *netstack.Net)
             stop:=context.AfterFunc(ctx,func(){_ = c.Close()})
             defer stop()
             _=c.SetDeadline(time.Now().Add(10*time.Second))
+            running:=wdttLife.handshakeActive.Add(1)
+            wdttTelemetryPeak(&wdttLife.handshakePeak,running)
             command,target,err:=wdttSocksHandshake(c)
-            if err!=nil { wdttTelemetry.socksHandshakeFailed.Add(1); return }
+            wdttLife.handshakeActive.Add(-1)
+            if err!=nil { wdttTelemetry.socksHandshakeFailed.Add(1); wdttLifeHandshakeError(err); return }
             _=c.SetDeadline(time.Time{})
             switch command {
             case 1:
