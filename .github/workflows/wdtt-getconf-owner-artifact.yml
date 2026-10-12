@@ -1,0 +1,61 @@
+name: WDTT GETCONF owner-only MIPSel ELF artifact
+on:
+  pull_request:
+    paths:
+      - 'go_client/**'
+      - 'tools/check_entware_candidate.py'
+      - '.github/workflows/wdtt-getconf-owner-artifact.yml'
+permissions:
+  contents: read
+concurrency:
+  group: wdtt-getconf-owner-elf-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  mipsle-lab-artifact:
+    if: github.repository == 'saymer-alt/proxy-turn-vk-android' && github.head_ref == 'feature/wdtt-getconf-diagnostics-20261012'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact PR candidate (not production)
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Acquire pinned Go toolchain from verified SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 2 https://github.com/ownik/entware-sdk/releases/download/v2026.07.04/entware-sdk-aarch64-3.10_gcc-8.4.0_glibc-2.27.Linux-x86_64.tar.zst -o sdk.tar.zst
+          echo 'd51f30c126425ebff203b107a1a0aa9d3a5844f6c481bc6ff4c117cadc208674  sdk.tar.zst' | sha256sum -c -
+          mkdir sdk-root
+          tar --zstd -xf sdk.tar.zst -C sdk-root --wildcards --wildcards-match-slash '*staging_dir/host/go/*'
+          go_bin="$(find sdk-root -type f -path '*/host/go/bin/go' -print -quit)"
+          test -n "$go_bin"
+          printf '%s\n' "$PWD/$go_bin" > "$RUNNER_TEMP/lab-go-path"
+      - name: Run all local Go tests and build MIPSel ELF
+        shell: bash
+        run: |
+          set -euo pipefail
+          go_bin="$(cat "$RUNNER_TEMP/lab-go-path")"
+          export GOTOOLCHAIN=local GOENV=off GOWORK=off GOTELEMETRY=off CGO_ENABLED=0
+          mkdir -p "$RUNNER_TEMP/getconf-go-cache" "$RUNNER_TEMP/getconf-go-path"
+          export GOCACHE="$RUNNER_TEMP/getconf-go-cache" GOPATH="$RUNNER_TEMP/getconf-go-path"
+          export GOOS=linux GOARCH=amd64
+          "$go_bin" version
+          test "$("$go_bin" version)" = 'go version go1.26.1 linux/amd64'
+          (cd go_client && "$go_bin" test -mod=readonly -short -count=1 -timeout=120s ./...)
+          export GOARCH=mipsle GOMIPS=softfloat
+          mkdir -p owner-test
+          (cd go_client && "$go_bin" build -mod=readonly -trimpath -buildvcs=false -ldflags='-s -w -buildid=' -o ../owner-test/wt-client-linux-mipsle .)
+          file owner-test/wt-client-linux-mipsle
+          readelf -h owner-test/wt-client-linux-mipsle | grep -E 'Class:|Data:|Machine:'
+          file owner-test/wt-client-linux-mipsle | grep -q 'MIPS'
+          (cd owner-test && sha256sum wt-client-linux-mipsle > SHA256SUMS)
+          printf 'SOURCE_COMMIT=%s\nOWNER_LAB_ONLY=true\nNO_PRODUCTION_RELEASE=true\n' "$GITHUB_SHA" > owner-test/BUILD-INFO.txt
+          (cd owner-test && sha256sum -c SHA256SUMS)
+      - name: Retain only ELF, SHA256 and source ref (no IPK)
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4
+        with:
+          name: wdtt-getconf-mipsle-owner-test
+          path: owner-test/
+          if-no-files-found: error
+          retention-days: 7

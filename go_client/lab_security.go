@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -103,6 +104,55 @@ func labStatus(code string) {
 	// Callers supply compile-time fixed codes, never upstream error strings.
 	_ = labWrite("status", []byte(code+"\n"))
 }
+
+
+// GETCONF uses its own status file because any already-established DTLS worker
+// may be registered while a different worker awaits its 45-second reply.
+// Never record server-supplied text, keys, passwords or arbitrary error strings.
+var labGetConfMu sync.Mutex
+var labGetConfFinal bool
+
+func labGetConfStatus(code string) {
+	switch code {
+	case "NOT_REQUESTED", "GETCONF_REQUESTED", "GETCONF_NO_CONFIG",
+		"GETCONF_TIMEOUT", "GETCONF_DENIED", "GETCONF_ERROR",
+		"GETCONF_RECEIVED", "CONFIG_READY":
+	default:
+		return
+	}
+	labGetConfMu.Lock()
+	defer labGetConfMu.Unlock()
+	if labGetConfFinal && code != "NOT_REQUESTED" {
+		return
+	}
+	if code == "NOT_REQUESTED" {
+		labGetConfFinal = false
+	}
+	if code == "CONFIG_READY" {
+		labGetConfFinal = true
+	}
+	if labWrite("getconf-status", []byte(code+"\n")) != nil {
+		labStatus("CONFIG_WRITE_FAILED")
+		os.Exit(78)
+	}
+}
+
+func labGetConfResult(conf string, err error) string {
+	if err != nil {
+		if strings.HasPrefix(err.Error(), "FATAL_AUTH:") {
+			return "GETCONF_DENIED"
+		}
+		var timeout net.Error
+		if errors.As(err, &timeout) && timeout.Timeout() {
+			return "GETCONF_TIMEOUT"
+		}
+		return "GETCONF_ERROR"
+	}
+	if conf == "" {
+		return "GETCONF_NO_CONFIG"
+	}
+	return "GETCONF_RECEIVED"
+}
 func labApplyFlags() {
 	values := map[string]string{"peer": labCfg.Peer, "listen": labCfg.Listen, "password": labCfg.Password, "vk": labCfg.VK, "vk-auth": labCfg.Auth, "vk-creds-file": labCfg.CredsFile, "go-dns": labCfg.DNS, "device-id": labCfg.Device, "n": fmt.Sprint(labCfg.Workers), "mode": "vpn"}
 	for k, v := range values {
@@ -178,6 +228,7 @@ func main() {
 	}
 	os.Args = os.Args[:1]
 	labStatus("STARTING")
+	labGetConfStatus("NOT_REQUESTED")
 	if labWrite("transport-ready", []byte("STARTING\n")) != nil {
 		os.Exit(78)
 	}

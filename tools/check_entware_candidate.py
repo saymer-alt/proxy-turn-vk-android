@@ -20,7 +20,18 @@ def main():
  candidate=run(['git','-C',ROOT,'rev-parse','HEAD'])
  # The maintained relay, original module locks and every unrelated runtime source stay exact.
  baseline=json.loads(run(['git','-C',ROOT,'show',BASE+':provenance/PHASE4-SOURCE-EQUIVALENCE.json']))['sha256']
- allowed={'go_client/main.go','go_client/lab_security.go','hardened-relay/server_pair_fixture_test.go'}
+ # An explicit reviewed diagnostic extension, not a blanket runtime exemption.
+ # Every modified client source has an exact Git blob pin; the remaining
+ # Phase4 source equivalence guard below is still enforced unchanged.
+ diagnostic_blobs={
+  'go_client/main.go':'e9e1a17294d998d15864676791a3d19389296726',
+  'go_client/lab_security.go':'2e3bd4e4c45d69d5d6c72b2addff1e255c4d43ac',
+  'go_client/session.go':'81febbe4125d585eb8d9db35b43117597ce70228',
+  'go_client/lab_getconf_status_test.go':'53e1fc751237d11555c1b64506a643bba0e956a5',
+ }
+ for name,blob in diagnostic_blobs.items():
+  assert run(['git','-C',ROOT,'hash-object',name])==blob,'UNREVIEWED_DIAGNOSTIC_SOURCE_CHANGE: '+name
+ allowed=set(diagnostic_blobs)|{'hardened-relay/server_pair_fixture_test.go'}
  for name,digest in baseline.items():
   if name not in allowed:assert sha(ROOT/name)==digest,'UNRELATED_RUNTIME_CHANGE: '+name
  env=os.environ.copy();env.update(GOTOOLCHAIN='local',GOENV='off',GOWORK='off',GOTELEMETRY='off',CGO_ENABLED='0',GOOS='linux',GOARCH='amd64',GOMIPS='softfloat',GOPATH=str(work/'gopath'),GOCACHE=str(work/'gocache'));env.pop('GOROOT',None)
@@ -57,7 +68,7 @@ def main():
  replacement+="    assert external(old)==external(new), 'THIRD_PARTY_SOURCE_CHANGED'\n"
  replacement+="    prefix=lambda path:path.read_text().split('===== SELECTED SOURCE COPYRIGHT HEADERS =====')[0]\n"
  replacement+="    assert prefix(work.parent/'base-inventory/NOTICE-COLLECTION.txt')==prefix(work/'license-evidence/NOTICE-COLLECTION.txt'), 'LICENSE_TEXT_CHANGED'\n"
- replacement+="    report['candidate_comparison']={'client_sha256_before':baseline['client_sha256'],'client_sha256_after':expected,'independent_candidate_rebuild_identical':True,'relay_identical':True,'third_party_sources_and_notices_identical':True,'local_source_inventory_changed':True,'reason':'explicit qWDTT entry and bounded multi-hash account grouping; local source headers and inventory change with implementation; no protocol/worker-limit change'}\n"
+ replacement+="    report['candidate_comparison']={'client_sha256_before':baseline['client_sha256'],'client_sha256_after':expected,'independent_candidate_rebuild_identical':True,'relay_identical':True,'third_party_sources_and_notices_identical':True,'local_source_inventory_changed':True,'reason':'explicit qWDTT importer plus SHA-pinned fixed-code GETCONF lab diagnostics; local source inventory changed without dependency, wire protocol or worker-limit changes'}\n"
  build.write_text(text[:start]+replacement+text[end:])
  built=work/'build'
  run(['python3',build,'--go',go,'--sdk-archive',pathlib.Path(a.sdk).resolve(),'--work',built,'--source',ROOT,'--cache',work/'gocache','--modules',work/'gopath'])

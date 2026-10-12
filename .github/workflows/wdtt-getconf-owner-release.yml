@@ -1,0 +1,85 @@
+name: WDTT one-off owner lab GETCONF MIPSel release
+on:
+  push:
+    branches: [feature/wdtt-getconf-diagnostics-20261012]
+    paths: ['.github/workflows/wdtt-getconf-owner-release.yml']
+permissions:
+  contents: write
+concurrency:
+  group: wdtt-getconf-owner-release
+  cancel-in-progress: false
+jobs:
+  validate-build-and-publish:
+    if: github.repository == 'saymer-alt/proxy-turn-vk-android'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: saymer-alt/proxy-turn-vk-android
+    steps:
+      - name: Pin current diagnostic branch source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          path: candidate
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Pin accepted Entware source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: saymer-alt/entware-go
+          ref: beb7e12c61deba465cdccfac77c8bb41ab0df89c
+          path: entware-ci
+          persist-credentials: false
+      - name: Pin KAS lifecycle for non-production acceptance
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: saymer-alt/keenetic-auto-setup
+          ref: 7c01e29c0ef278532e083a0d6868cfef4d2ca003
+          path: kas-ci
+          persist-credentials: false
+      - name: Install pinned toolchain and CI prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y qemu-user zstd busybox cmake make pkg-config libjson-c-dev shellcheck
+          curl -fL --retry 2 https://github.com/ownik/entware-sdk/releases/download/v2026.07.04/entware-sdk-aarch64-3.10_gcc-8.4.0_glibc-2.27.Linux-x86_64.tar.zst -o sdk.tar.zst
+          echo 'd51f30c126425ebff203b107a1a0aa9d3a5844f6c481bc6ff4c117cadc208674  sdk.tar.zst' | sha256sum -c -
+          mkdir sdk-root
+          tar --zstd -xf sdk.tar.zst -C sdk-root --wildcards --wildcards-match-slash '*staging_dir/host/go/*'
+      - name: Full guarded candidate acceptance before any release
+        shell: bash
+        run: |
+          set -euo pipefail
+          go_bin="$(find sdk-root -type f -path '*/host/go/bin/go' -print -quit)"
+          test -n "$go_bin"
+          python3 candidate/tools/check_entware_candidate.py --go "$go_bin" --sdk sdk.tar.zst --entware entware-ci --kas kas-ci --work candidate-work
+      - name: Create immutable non-latest prerelease for single owner-lab ELF
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/feature/wdtt-getconf-diagnostics-20261012'
+          test -s candidate-work/build/wt-client-linux-mipsle
+          test "$(git -C candidate rev-parse HEAD)" = "$GITHUB_SHA"
+          mkdir -m 700 -p owner-lab
+          cp candidate-work/build/wt-client-linux-mipsle owner-lab/wt-client-linux-mipsle
+          file owner-lab/wt-client-linux-mipsle | grep -q 'MIPS'
+          (cd owner-lab && sha256sum wt-client-linux-mipsle > SHA256SUMS && sha256sum -c SHA256SUMS)
+          printf 'SOURCE_COMMIT=%s\nOWNER_ONLY_EXPERIMENTAL=true\nKAS_WDTT_256MB_SUPPORTED=false\n' "$GITHUB_SHA" > owner-lab/BUILD-INFO.txt
+          short="$(printf '%s' "$GITHUB_SHA" | cut -c1-12)"
+          tag="wdtt-owner-lab-getconf-$short"
+          if gh release view "$tag" --repo "$GH_REPO" >/dev/null 2>&1; then
+            echo "Refusing to overwrite prior immutable owner lab release $tag"
+            exit 1
+          fi
+          cat > owner-lab/NOTES.md <<'NOTES'
+          Experimental owner's stand-alone KN-1010 MIPSel WDTT GETCONF diagnostic ELF only.
+          No KAS install, no production OPKG feed or IPK, no automatic startup.
+          Official KAS+WDTT minimum remains 512 MB; 256 MB owner lab is unsupported.
+          Use sha256sum -c SHA256SUMS and do not replace old wt-client executable.
+          File getconf-status contains only fixed redacted codes and never secrets.
+          The binary is not proof of real VPN traffic or allowlist compatibility.
+          This tag and release assets are never overwritten by this workflow.
+          NOTES
+          gh release create "$tag"             owner-lab/wt-client-linux-mipsle             owner-lab/SHA256SUMS             owner-lab/BUILD-INFO.txt             --repo "$GH_REPO"             --target "$GITHUB_SHA"             --title "WDTT GETCONF owner lab MIPSel ($short)"             --notes-file owner-lab/NOTES.md             --prerelease --latest=false
+          gh release view "$tag" --repo "$GH_REPO" --json url,tagName,isPrerelease,assets --jq '{url,tagName,isPrerelease,assets:[.assets[].name]}'

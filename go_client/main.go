@@ -409,6 +409,7 @@ func upstreamMain() {
 				os.Exit(78)
 			}
 			labStatus("CONFIG_READY")
+			labGetConfStatus("CONFIG_READY")
 
 			if activeConnMode == "socks" {
 				dev, tnet, err := startUserspaceWireGuard(finalConf)
