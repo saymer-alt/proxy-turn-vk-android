@@ -142,6 +142,9 @@ func labValidate(c labConfig) error {
 	return nil
 }
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "-import-qwdtt" {
+		os.Exit(qImportCLI(os.Args[2:], os.Stdout, os.Stderr))
+	}
 	if len(os.Args) == 2 && (os.Args[1] == "-h" || os.Args[1] == "--help") {
 		fmt.Println("wt-client laboratory vpn-only profile: -config-file /absolute/private/config.json; no AWG daemon; secrets via 0600 file in 0700 directory; maximum session 30 minutes")
 		return

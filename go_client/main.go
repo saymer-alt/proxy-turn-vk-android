@@ -340,6 +340,9 @@ func upstreamMain() {
 	numGroups := (*numW + workersPerGroup - 1) / workersPerGroup
 
 	wrapStatus := "OFF"
+	if getVkAuthMode() == "account" {
+		numGroups = min(len(hashes), *numW)
+	}
 	if len(wrapKey) == wrapKeyLen {
 		wrapStatus = "ON (password HKDF + RTP AEAD)"
 	}
@@ -446,6 +449,9 @@ func upstreamMain() {
 		endIdx := startIdx + workersPerGroup
 		if endIdx > *numW {
 			endIdx = *numW
+		}
+		if getVkAuthMode() == "account" {
+			startIdx, endIdx = accountGroupRange(g, numGroups, *numW)
 		}
 		groupSize := endIdx - startIdx
 		if groupSize <= 0 {

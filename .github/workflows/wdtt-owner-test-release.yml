@@ -1,0 +1,124 @@
+name: WDTT explicit owner-test IPK (ARM64 and MIPSel)
+on:
+  push:
+    branches: [feature/qwdtt-import-20261012]
+    paths: ['.github/workflows/wdtt-owner-test-release.yml']
+permissions:
+  contents: write
+concurrency:
+  group: wdtt-owner-test-release
+  cancel-in-progress: false
+jobs:
+  build-and-retain:
+    if: github.repository == 'saymer-alt/proxy-turn-vk-android'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: saymer-alt/proxy-turn-vk-android
+    steps:
+      - name: Check out exact candidate commit
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          path: candidate
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check out pinned Entware recipe
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: saymer-alt/entware-go
+          ref: beb7e12c61deba465cdccfac77c8bb41ab0df89c
+          path: entware-ci
+          persist-credentials: false
+      - name: Check out pinned KAS lifecycle
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: saymer-alt/keenetic-auto-setup
+          ref: 7c01e29c0ef278532e083a0d6868cfef4d2ca003
+          path: kas-ci
+          persist-credentials: false
+      - name: Install pinned SDK and test prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y qemu-user zstd busybox cmake make pkg-config libjson-c-dev shellcheck
+          curl -fL --retry 2 https://github.com/ownik/entware-sdk/releases/download/v2026.07.04/entware-sdk-aarch64-3.10_gcc-8.4.0_glibc-2.27.Linux-x86_64.tar.zst -o sdk.tar.zst
+          echo 'd51f30c126425ebff203b107a1a0aa9d3a5844f6c481bc6ff4c117cadc208674  sdk.tar.zst' | sha256sum -c -
+          mkdir sdk-root
+          tar --zstd -xf sdk.tar.zst -C sdk-root --wildcards --wildcards-match-slash '*staging_dir/host/go/*'
+      - name: Full qWDTT, both ELF, real opkg, KAS, TURN and Mihomo acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          go_bin="$(find sdk-root -type f -path '*/host/go/bin/go')"
+          test -n "$go_bin"
+          python3 candidate/tools/check_entware_candidate.py --go "$go_bin" --sdk sdk.tar.zst --entware entware-ci --kas kas-ci --work candidate-work
+      - name: Retain both tested owner-test IPKs and ELF with immutable SHA manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          private="$RUNNER_TEMP/wdtt-private-qwdtt-$GITHUB_RUN_ID"
+          python3 candidate-work/recipe/wdtt/owner_local_ipk.py \
+            --report candidate-work/build/build-report.json \
+            --binary-dir candidate-work/build \
+            --kas kas-ci \
+            --retain-private-dir "$private" \
+            --acceptance-report candidate-work/build/owner-opkg-report.json
+          release="$RUNNER_TEMP/wdtt-public-test-release"
+          mkdir -m 700 "$release"
+          cp "$private/"* "$release/"
+          (cd "$release" && sha256sum -c SHA256SUMS)
+          python3 - "$release" <<'PY'
+          import hashlib,json,pathlib,sys
+          d=pathlib.Path(sys.argv[1])
+          data=json.loads((d/'OWNER-TEST-BUILD.json').read_text())
+          pkgs=data['packages']
+          assert len(pkgs)==2 and {x['entware_arch'] for x in pkgs}=={'aarch64-3.10','mipsel-3.4'}
+          assert data['owner_install_candidate'] is True and data['public_distribution_approved'] is False and data['install_ready'] is False
+          for p in pkgs:
+              ipk=d/('wt-client-owner-test_'+p['entware_arch']+'.ipk')
+              assert hashlib.sha256(ipk.read_bytes()).hexdigest()==p['ipk_sha256']
+              elf=d/('wt-client-linux-'+p['arch'])
+              assert hashlib.sha256(elf.read_bytes()).hexdigest()==p['binary_sha256']
+          accepted=json.loads((d/'owner-opkg-report.json').read_text())
+          assert accepted['passed'] is True
+          print('PASS: BOTH ARCHES, SHA, REAL OPKG AND NO FALSE RELEASE APPROVAL')
+          PY
+      - name: Publish one new non-latest prerelease, never delete or overwrite
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/feature/qwdtt-import-20261012'
+          short="$(printf '%s' "$GITHUB_SHA" | cut -c1-12)"
+          tag="wdtt-owner-test-qwdtt-$short"
+          if gh release view "$tag" --repo "$GH_REPO" >/dev/null 2>&1; then
+            echo "Release $tag already exists; refusing to replace any assets"
+            exit 1
+          fi
+          cat > "$RUNNER_TEMP/WDTT_RELEASE_NOTES.md" <<'NOTES'
+          EXPERIMENTAL OWNER-TEST ONLY. Not a production release or Entware feed.
+          Two packages: aarch64-3.10 and mipsel-3.4 softfloat, plus both original ELF,
+          checksums, notices, build provenance and real offline opkg acceptance.
+          These are actual owner-test installable archives, not quarantine packages.
+          No autostart; installing IPK alone does not start WDTT.
+          HARDWARE ADMISSION IS NOT PROVEN: KN-1010 preflight currently fails
+          MemAvailable >= 98304 KiB and verified native zRAM; do not force opkg
+          or bypass KAS admission. The qwdtt importer DOES NOT accept the 9/16/18
+          worker public profiles; anonymous conflict remains unresolved.
+          Source licensing inventory still reports an unresolved fhttp dependency
+          scope. Owner explicitly authorized this limited public test publication;
+          this is NOT a statement of third-party licensing clearance.
+          Never put real qwdtt:// passwords, TURN credentials or router settings
+          into GitHub, build logs, Issues or public files.
+          NO production latest/stable/feeds or other release assets are changed.
+          Each tag is immutable by this workflow; no cleanup/delete/prune.
+          NOTES
+          release="$RUNNER_TEMP/wdtt-public-test-release"
+          gh release create "$tag" "$release/"* \
+            --repo "$GH_REPO" \
+            --target "$GITHUB_SHA" \
+            --title "WDTT qWDTT owner-test ARM64 + MIPSel ($short)" \
+            --notes-file "$RUNNER_TEMP/WDTT_RELEASE_NOTES.md" \
+            --prerelease --latest=false
+          gh release view "$tag" --repo "$GH_REPO" --json url,tagName,isPrerelease,assets --jq '{url,tagName,isPrerelease,assets:[.assets[].name]}'
