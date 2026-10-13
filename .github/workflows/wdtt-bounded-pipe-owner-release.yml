@@ -1,0 +1,127 @@
+name: WDTT PR23 bounded pipe owner lab ARM64 and MIPSel prerelease
+on:
+  push:
+    branches: [release/wdtt-bounded-pipe-pr23-20261013]
+    paths: ['.github/workflows/wdtt-bounded-pipe-owner-release.yml']
+permissions:
+  contents: write
+concurrency:
+  group: wdtt-bounded-pipe-owner-release
+  cancel-in-progress: false
+jobs:
+  dual-arch-owner-only:
+    if: github.repository == 'saymer-alt/proxy-turn-vk-android'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: saymer-alt/proxy-turn-vk-android
+      SOURCE_SHA: 239df99dfb28adfc7a9ce03497a4b97d051b3ffd
+    steps:
+      - name: Exact isolated owner-lab source and safe checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          path: candidate
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify only workflow was added on top of immutable PR23
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/release/wdtt-bounded-pipe-pr23-20261013'
+          test "$(git -C candidate rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git -C candidate rev-parse "$SOURCE_SHA")" = "$SOURCE_SHA"
+          changed="$(git -C candidate diff --name-only "$SOURCE_SHA" "$GITHUB_SHA")"
+          test "$changed" = '.github/workflows/wdtt-bounded-pipe-owner-release.yml'
+          grep -Fq 'time.Sleep(30 * time.Minute); labStatus("TIME_LIMIT"); os.Exit(75)' candidate/go_client/lab_security.go
+          grep -Fq 'const packetPipeBytes = 64 * 1024' candidate/go_client/packet_pipe.go
+          grep -Fq 'const packetPipePackets = 32' candidate/go_client/packet_pipe.go
+          git -C candidate diff --exit-code "$SOURCE_SHA" "$GITHUB_SHA" -- go_client tools hardened-relay
+          echo "Exact PR23 runtime, 30-minute exit75 and bounded-pipe source verified"
+      - name: Pinned Entware acceptance source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          repository: saymer-alt/entware-go
+          ref: beb7e12c61deba465cdccfac77c8bb41ab0df89c
+          path: entware-ci
+          persist-credentials: false
+      - name: Pinned KAS lifecycle source (read-only)
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          repository: saymer-alt/keenetic-auto-setup
+          ref: 7c01e29c0ef278532e083a0d6868cfef4d2ca003
+          path: kas-ci
+          persist-credentials: false
+      - name: Install exact pinned SDK and offline test dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y qemu-user zstd busybox cmake make pkg-config libjson-c-dev shellcheck
+          curl -fL --retry 2 https://github.com/ownik/entware-sdk/releases/download/v2026.07.04/entware-sdk-aarch64-3.10_gcc-8.4.0_glibc-2.27.Linux-x86_64.tar.zst -o sdk.tar.zst
+          echo 'd51f30c126425ebff203b107a1a0aa9d3a5844f6c481bc6ff4c117cadc208674  sdk.tar.zst' | sha256sum -c -
+          mkdir sdk-root
+          tar --zstd -xf sdk.tar.zst -C sdk-root --wildcards --wildcards-match-slash '*staging_dir/host/go/*'
+      - name: Full pinned Go, Entware, KAS, TURN, WG, SOCKS and opkg acceptance
+        run: |
+          set -euo pipefail
+          go_bin="$(find sdk-root -type f -path '*/host/go/bin/go' -print -quit)"
+          test -n "$go_bin"
+          python3 candidate/tools/check_entware_candidate.py --go "$go_bin" --sdk sdk.tar.zst --entware entware-ci --kas kas-ci --work candidate-work
+      - name: Prepare verified dual-architecture executable assets
+        run: |
+          set -euo pipefail
+          test -s candidate-work/direct-client-arm64
+          test -s candidate-work/direct-client-mipsle
+          test -s candidate-work/build/wt-client-linux-arm64
+          test -s candidate-work/build/wt-client-linux-mipsle
+          cmp candidate-work/direct-client-arm64 candidate-work/build/wt-client-linux-arm64
+          cmp candidate-work/direct-client-mipsle candidate-work/build/wt-client-linux-mipsle
+          mkdir -m 700 owner-lab
+          cp candidate-work/direct-client-arm64 owner-lab/wt-client-linux-arm64
+          cp candidate-work/direct-client-mipsle owner-lab/wt-client-linux-mipsle
+          file owner-lab/wt-client-linux-arm64 | grep -Eq 'ARM aarch64|aarch64'
+          file owner-lab/wt-client-linux-mipsle | grep -q 'MIPS'
+          qemu-aarch64 owner-lab/wt-client-linux-arm64 -h | grep -F 'maximum session 30 minutes'
+          qemu-mipsel owner-lab/wt-client-linux-mipsle -h | grep -F 'maximum session 30 minutes'
+          (cd owner-lab && sha256sum wt-client-linux-arm64 wt-client-linux-mipsle > SHA256SUMS && sha256sum -c SHA256SUMS)
+          printf 'OWNER_LAB_ONLY=true\nPR=23\nCANDIDATE_SOURCE_SHA=%s\nWORKFLOW_SHA=%s\nTARGETS=linux_arm64,linux_mipsle_softfloat\nMAX_RUNTIME_SECONDS=1800\nTIME_LIMIT_EXIT_CODE=75\nSOCKS_LISTENER=127.0.0.1:1081\nNO_AUTOSTART=true\nKAS_256MB_SUPPORTED=false\nPRODUCTION_APPROVED=false\n' "$SOURCE_SHA" "$GITHUB_SHA" > owner-lab/BUILD-INFO.txt
+          cat > owner-lab/RELEASE-NOTES.md <<'NOTES'
+          # WDTT PR #23 bounded packet pipe — OWNER LAB ONLY
+
+          Experimental, source-pinned ARM64 NC-1812 + MIPSel softfloat KN-1010 standalone test executables.
+          Source: https://github.com/saymer-alt/proxy-turn-vk-android/pull/23
+          Tracking: https://github.com/saymer-alt/proxy-turn-vk-android/issues/22
+          Real-device A/B: https://github.com/saymer-alt/proxy-turn-vk-android/issues/19
+
+          Replaces unbounded TURN<->DTLS AsyncPacketPipe with fixed per-direction 64-KiB data and 32-record queue.
+          Blocks producers instead of growing queues; cancellation and session/ping pump cleanup are tested.
+          Preserves on-wire protocol, WRAP, WG, loopback SOCKS 127.0.0.1:1081, 32/64 TCP admission,
+          4 UDP associations, existing MemAvailable gates and hard 30-minute exit code 75.
+
+          CI source/race/QEMU/native memory and transport tests passed separately on PR #23.
+          This release rebuilds both clients via pinned independent Entware/KAS/opkg/SOCKS/TURN acceptance.
+          NOTICE: this release is NOT production-ready; no proof of safe admission on 512-MiB SE or
+          256-MiB KN-1010, real VK refresh/provider memory, no-WAN-fallback or physical hardware MTU/loss.
+          KN-1010 is owner-only standalone testing; KAS 512-MiB minimum is unchanged.
+
+          No IPK, no autostart, no router policy change, no service installation and no stable/latest feed promotion.
+          Do not run alongside the active 30-minute PR #21 A/B. Keep previous binaries and private config unchanged.
+          All secrets remain in local root-owned 0600 files in 0700 directories; NEVER upload configs or raw logs.
+          License: GPL-3.0-or-later source is linked by immutable git tag/commit; fhttp dependency
+          license scope remains under review; this owner test is not a general distribution clearance.
+          NOTES
+      - name: Publish unique immutable-by-workflow PR23 non-latest prerelease
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/release/wdtt-bounded-pipe-pr23-20261013'
+          tag="wdtt-owner-lab-boundedpipe-pr23-239df99dfb28"
+          if gh release view "$tag" --repo "$GH_REPO" >/dev/null 2>&1; then
+            echo "Existing release, refuse to replace"
+            exit 1
+          fi
+          gh release create "$tag" \
+            owner-lab/wt-client-linux-arm64 owner-lab/wt-client-linux-mipsle \
+            owner-lab/SHA256SUMS owner-lab/BUILD-INFO.txt \
+            --repo "$GH_REPO" --target "$SOURCE_SHA" \
+            --title 'WDTT bounded pipe PR23 owner lab ARM64/MIPSel (239df99)' \
+            --notes-file owner-lab/RELEASE-NOTES.md --prerelease --latest=false
+          gh release view "$tag" --repo "$GH_REPO" --json url,tagName,isPrerelease,assets --jq '{url,tagName,isPrerelease,assets:[.assets[].name]}'
