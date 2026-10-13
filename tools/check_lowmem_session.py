@@ -3,6 +3,8 @@
 import argparse,concurrent.futures,http.client,json,os,pathlib,socket,struct,subprocess,tempfile,time
 from check_socks_udp_pair import recv_exact,sock_connect,udp_assoc,probe_udp,wait_until
 
+SLOW_READ_MS = 0
+
 def bulk(index):
  start=time.monotonic()
  with sock_connect() as s:
@@ -16,7 +18,8 @@ def bulk(index):
   rsp=http.client.HTTPResponse(s);rsp.begin();total=0
   if rsp.status!=200:raise RuntimeError('HTTP fixture failed')
   while True:
-   b=rsp.read(65536)
+   b=rsp.read(16384 if SLOW_READ_MS else 65536)
+   if SLOW_READ_MS:time.sleep(SLOW_READ_MS/1000)
    if not b:break
    if index%2:
     if b!=b'UPLOAD-OK\n':raise RuntimeError('upload response mismatch')
@@ -28,8 +31,11 @@ def bulk(index):
 def main():
  p=argparse.ArgumentParser()
  for n in ['harness','client-test','report','samples']:p.add_argument('--'+n,required=True)
+ p.add_argument('--hold-seconds',type=float,default=0);p.add_argument('--slow-read-ms',type=float,default=0)
  p.add_argument('--workers',type=int,choices=[9,18],required=True);p.add_argument('--soak',action='store_true');a=p.parse_args()
- result={'passed':False,'scope':'native test process, real 9/18 RunSession TURN/DTLS/WG/SOCKS; synthetic credential provider, no VK or hardware','workers':a.workers,'soak':a.soak,'bulk_bytes':0,'udp_payload_bytes':0,'latency_seconds':[],'drain_wait_seconds':[]}
+ global SLOW_READ_MS
+ SLOW_READ_MS=a.slow_read_ms
+ result={'hold_seconds':a.hold_seconds,'slow_read_ms':a.slow_read_ms,'passed':False,'scope':'native test process, real 9/18 RunSession TURN/DTLS/WG/SOCKS; synthetic credential provider, no VK or hardware','workers':a.workers,'soak':a.soak,'bulk_bytes':0,'udp_payload_bytes':0,'latency_seconds':[],'drain_wait_seconds':[]}
  children=[];controls=[];sockets=[];stage='server_start';rounds=0;began=time.monotonic()
  with tempfile.TemporaryDirectory(prefix='wdtt-memory-session-') as temp:
   d=pathlib.Path(temp);d.chmod(0o700)
@@ -42,6 +48,18 @@ def main():
    for _ in range(4):
     control,port=udp_assoc();controls.append((control,port));udp=socket.socket(socket.AF_INET,socket.SOCK_DGRAM);udp.bind(('127.0.0.1',0));udp.settimeout(10);sockets.append(udp)
    began=time.monotonic();rounds=0
+   if a.hold_seconds:
+    # Hold a real SOCKS TCP connection open, then prove fresh payload delivery.
+    with sock_connect() as held:
+     held.settimeout(60)
+     held.sendall(b'\x05\x01\x00\x01'+socket.inet_aton('10.66.66.1')+struct.pack('!H',18080))
+     if recv_exact(held,10)[:2]!=b'\x05\x00':raise RuntimeError('held TCP refused')
+     time.sleep(a.hold_seconds)
+     held.sendall(b'GET /memory-bulk HTTP/1.1\r\nHost: fixture.invalid\r\nConnection: close\r\n\r\n')
+     rsp=http.client.HTTPResponse(held);rsp.begin()
+     if rsp.status!=200 or rsp.read()!=b'\x01'*1048576:raise RuntimeError('held TCP fresh payload failed')
+     result['held_tcp_verified']=True
+
    while True:
     stage='previous_tcp_slot_drain';drain_start=time.monotonic()
     def drained():

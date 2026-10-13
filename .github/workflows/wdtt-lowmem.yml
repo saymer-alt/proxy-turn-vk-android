@@ -1,7 +1,7 @@
-name: WDTT low-memory source lab
+name: WDTT bounded packet pipe lab
 on:
   pull_request:
-    branches: [feature/wdtt-tcp-idle-teardown-owner-20261012]
+    branches: [feature/wdtt-lowmem-owner-20261013]
   workflow_dispatch:
 permissions:
   contents: read
@@ -64,13 +64,19 @@ jobs:
           cd go_client
           GOARCH=arm64 "$GO_BIN" test -mod=readonly -trimpath -buildvcs=false -c -o "$RUNNER_TEMP/lowmem-arm64.test"
           GOARCH=mipsle "$GO_BIN" test -mod=readonly -trimpath -buildvcs=false -c -o "$RUNNER_TEMP/lowmem-mipsle.test"
-          qemu-aarch64 "$RUNNER_TEMP/lowmem-arm64.test" -test.run '^TestLowmem' -test.timeout=120s
-          qemu-mipsel "$RUNNER_TEMP/lowmem-mipsle.test" -test.run '^TestLowmem' -test.timeout=120s
+          qemu-aarch64 "$RUNNER_TEMP/lowmem-arm64.test" -test.run '^Test(Lowmem|Bounded|LimitedPipe)' -test.timeout=120s
+          qemu-mipsel "$RUNNER_TEMP/lowmem-mipsle.test" -test.run '^Test(Lowmem|Bounded|LimitedPipe)' -test.timeout=120s
           file "$RUNNER_TEMP"/lowmem-*.test
           sha256sum "$RUNNER_TEMP"/lowmem-*.test
-      - name: Paired native memory and real loopback TURN/DTLS/WG/SOCKS lab
+      - name: Immutable PR21 paired stalled pipe and loopback TCP/UDP memory lab
         run: |
-          sudo --preserve-env=GOPATH,GOCACHE env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0="$PWD" python3 tools/check_lowmem_lab.py --go "$GO_BIN" --work "$RUNNER_TEMP/lowmem-private" --report-dir "$RUNNER_TEMP/lowmem-evidence" --sessions
+          sudo --preserve-env=GOPATH,GOCACHE env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0="$PWD" python3 tools/check_bounded_pipe_lab.py --go "$GO_BIN" --work "$RUNNER_TEMP/lowmem-private" --report-dir "$RUNNER_TEMP/lowmem-evidence"
+      - name: Give uploader ownership of numeric evidence only
+        if: always()
+        run: |
+          if [ -d "$RUNNER_TEMP/lowmem-evidence" ]; then
+            sudo chown -R -- "$(id -u):$(id -g)" "$RUNNER_TEMP/lowmem-evidence"
+          fi
       - name: Numeric evidence only; never heap, binary or private configuration
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f

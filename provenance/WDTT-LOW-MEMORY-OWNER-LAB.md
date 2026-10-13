@@ -1,5 +1,9 @@
 # WDTT low-memory owner lab — Issue #19
 
+Follow-up P0, Issue #22: [bounded pipe design, reproducible tests and quantitative
+comparison](WDTT-BOUNDED-PIPE-OWNER-LAB.md). This follow-up is stacked on the
+immutable #21 head; it does not establish 512 MiB admission.
+
 Status: **RESEARCH ONLY; no 512 MiB hardware admission**. Allocation reductions
 are demonstrated. Full-transport peak RSS improvement is **not consistent**
 across worker plans and paired runs. Keep every existing memory floor. No router, KAS,

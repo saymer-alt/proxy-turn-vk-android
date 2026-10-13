@@ -1,0 +1,59 @@
+{
+  "baseline": "f04bdbc101c8f9f86c2cc6a1cc512e9d2373504c",
+  "candidate": "e8c1b04c54d8ff908fa7c337a4f46c5d9940a8bd",
+  "scope": "paired native Linux pipe-only stalled-consumer RSS/HWM, same original harness and pinned Go 1.26.1, two CPUs; no full transport/hardware claim",
+  "runs": {
+    "baseline-9": {
+      "hwm_kib": [
+        248300,
+        215192,
+        216800
+      ],
+      "median_hwm_kib": 216800,
+      "stalled_accepted": [
+        73728,
+        73728,
+        73728
+      ]
+    },
+    "candidate-9": {
+      "hwm_kib": [
+        14108,
+        14136,
+        14148
+      ],
+      "median_hwm_kib": 14136,
+      "stalled_accepted": [
+        576,
+        576,
+        576
+      ]
+    },
+    "baseline-18": {
+      "hwm_kib": [
+        409684,
+        436808,
+        416356
+      ],
+      "median_hwm_kib": 416356,
+      "stalled_accepted": [
+        147456,
+        147456,
+        147456
+      ]
+    },
+    "candidate-18": {
+      "hwm_kib": [
+        15852,
+        15540,
+        15524
+      ],
+      "median_hwm_kib": 15540,
+      "stalled_accepted": [
+        1152,
+        1152,
+        1152
+      ]
+    }
+  }
+}

@@ -11,7 +11,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cbeuw/connutil"
 	"github.com/pion/dtls/v3"
 	"github.com/pion/dtls/v3/pkg/crypto/selfsign"
 	"github.com/pion/logging"
@@ -132,6 +131,8 @@ func RunSession(
 		return false, fmt.Errorf("TURN клиент: %w", err)
 	}
 	defer tc.Close()
+	stopTURN := context.AfterFunc(ctx, func() { tc.Close(); _ = c.Close() })
+	defer stopTURN()
 
 	if err = tc.Listen(); err != nil {
 		return false, fmt.Errorf("TURN Listen: %w", err)
@@ -148,7 +149,8 @@ func RunSession(
 		}
 		return false, fmt.Errorf("TURN Allocate: %w", err)
 	}
-	defer relay.Close()
+	closeRelay := sync.OnceFunc(func() { _ = relay.Close() })
+	defer closeRelay()
 
 	// Reset error count on successful allocation
 	getStreamCache(creds.CacheStreamID).errorCount.Store(0)
@@ -156,7 +158,7 @@ func RunSession(
 	log.Printf("[СЕССИЯ #%d] Relay: %s", sessionID, relay.LocalAddr())
 
 	// Pipe для DTLS ↔ TURN relay
-	pipeA, pipeB := connutil.AsyncPacketPipe()
+	pipeA, pipeB := newBoundedPacketPipe()
 
 	sessCtx, sessCancel := context.WithCancel(ctx)
 	defer sessCancel()
@@ -193,10 +195,17 @@ func RunSession(
 	}
 
 	stopRelay := context.AfterFunc(sessCtx, func() {
-		_ = relay.SetDeadline(time.Now())
-		_ = pipeA.SetDeadline(time.Now())
+		closeRelay()
+		_ = pipeA.Close()
 	})
-	defer stopRelay()
+	defer func() {
+		sessCancel()
+		_ = pipeA.Close()
+		closeRelay()
+		stopRelay()
+		relayWg.Wait()
+		sessionWg.Wait()
+	}()
 
 	// relay → pipeA (UNWRAP: strip RTP header + decrypt)
 	go func() {
@@ -293,7 +302,7 @@ func RunSession(
 		<-handshakeSem
 		return false, fmt.Errorf("DTLS клиент: %w", err)
 	}
-	defer dtlsConn.Close()
+	defer func() { sessCancel(); _ = pipeA.Close(); _ = dtlsConn.Close() }()
 
 	hctx, hcancel := context.WithTimeout(sessCtx, 50*time.Second)
 	log.Printf("[ВОРКЕР #%d] [DTLS] Рукопожатие (Handshake)...", sessionID)
@@ -352,7 +361,7 @@ func RunSession(
 		SendCh: make(chan []byte, workerSendBuf),
 	}
 	d.Register(slot)
- labWorkerRegistered()
+	labWorkerRegistered()
 	defer d.Unregister(slot)
 
 	// Proxy DTLS ↔ Dispatcher
@@ -464,6 +473,9 @@ func RunPing(
 	peer *net.UDPAddr,
 	creds *Credentials,
 ) (int64, error) {
+	ctx, pingCancel := context.WithTimeout(ctx, 15*time.Second)
+	defer pingCancel()
+
 	startPing := time.Now()
 
 	if len(creds.TurnURLs) == 0 {
@@ -516,6 +528,8 @@ func RunPing(
 		return 0, err
 	}
 	defer tc.Close()
+	stopTURN := context.AfterFunc(ctx, func() { tc.Close(); _ = c.Close() })
+	defer stopTURN()
 
 	if err = tc.Listen(); err != nil {
 		return 0, err
@@ -525,9 +539,10 @@ func RunPing(
 	if err != nil {
 		return 0, err
 	}
-	defer relay.Close()
+	closeRelay := sync.OnceFunc(func() { _ = relay.Close() })
+	defer closeRelay()
 
-	pipeA, pipeB := connutil.AsyncPacketPipe()
+	pipeA, pipeB := newBoundedPacketPipe()
 	defer pipeA.Close()
 	defer pipeB.Close()
 
@@ -536,6 +551,17 @@ func RunPing(
 
 	var relayWg sync.WaitGroup
 	relayWg.Add(2)
+	stopRelay := context.AfterFunc(sessCtx, func() {
+		closeRelay()
+		_ = pipeA.Close()
+	})
+	defer func() {
+		sessCancel()
+		_ = pipeA.Close()
+		closeRelay()
+		stopRelay()
+		relayWg.Wait()
+	}()
 
 	useWrap := len(tp.WrapKey) == wrapKeyLen
 	var obfsCfg *ObfsConfig
@@ -567,7 +593,9 @@ func RunPing(
 				}
 				payload = plain[:m]
 			}
-			_, _ = pipeA.WriteTo(payload, peer)
+			if _, err := pipeA.WriteTo(payload, peer); err != nil {
+				return
+			}
 		}
 	}()
 
@@ -589,7 +617,9 @@ func RunPing(
 				}
 				out = wrapped
 			}
-			_, _ = relay.WriteTo(out, peer)
+			if _, err := relay.WriteTo(out, peer); err != nil {
+				return
+			}
 		}
 	}()
 
@@ -611,7 +641,7 @@ func RunPing(
 	if err != nil {
 		return 0, err
 	}
-	defer dtlsConn.Close()
+	defer func() { sessCancel(); _ = pipeA.Close(); _ = dtlsConn.Close() }()
 
 	hctx, hcancel := context.WithTimeout(sessCtx, 15*time.Second)
 	defer hcancel()
