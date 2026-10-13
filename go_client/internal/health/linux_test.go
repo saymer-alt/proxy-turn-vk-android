@@ -38,6 +38,9 @@ func TestLinuxIdentityTelemetryAndOldStatus(t *testing.T) {
 	b, _ := json.Marshal(map[string]any{"schema": 2, "uptime_seconds": int64(time.Since(l.Started).Seconds())})
 	put("socks-telemetry.json", b)
 	put("status", []byte("TIME_LIMIT\n"))
+	// Explicit fixture mtime avoids coarse filesystem write timestamps near
+	// process birth; production freshness checks remain strictly unchanged.
+	stamp("socks-telemetry.json", time.Now())
 	stamp("status", l.Started.Add(-time.Second))
 	o := l.Observe(time.Now())
 	if !o.Alive || !o.Verified || !o.TelemetryFresh || o.TimeLimit {
