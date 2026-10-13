@@ -1,0 +1,4 @@
+/var/lib/wdtt-lowmem-arm64.test:  ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV), statically linked, Go BuildID=r2f9kpojDH0yzMzIgwQQ/g7IX0fGai4nzACQH-gpw/bk8sMJsNzG37cqwjjiZk/nDfLn6RK_H_1c4_G1pr1, BuildID[sha1]=14ac7dd662da39faa70eef948b38ca232607b1b5, with debug_info, not stripped
+/var/lib/wdtt-lowmem-mipsle.test: ELF 32-bit LSB executable, MIPS, MIPS32 version 1 (SYSV), statically linked, Go BuildID=C_fMhkAb4Ze6v5vA_2TX/CLAElzHjC7GLC0VADaUr/a_Q7VMoz7QGntJU6TDla/vfdGYU7SoTk1HfE_6dSp, BuildID[sha1]=e943db304ae548b07d142f37714ae355f592db33, with debug_info, not stripped
+d6e2303839a2692a39d5add0c0ba5d079c83e5ad7c68aa123fcd40037b48aa37  /var/lib/wdtt-lowmem-arm64.test
+cdbf2bf1f6f87e1544db28e63a564b06b5f67a033c0e5332d67258e2d54481f7  /var/lib/wdtt-lowmem-mipsle.test

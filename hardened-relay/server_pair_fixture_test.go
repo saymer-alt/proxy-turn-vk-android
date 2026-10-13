@@ -45,7 +45,9 @@ func TestLocalPairHarness(t *testing.T) {
 		t.Fatal(err)
 	}
 	password := "SYNTHETIC-LOCAL-WDTT-PASSWORD-ONLY"
-	db = &Database{Devices: map[string]*ClientDevice{"fixture": {DeviceID: "fixture", IP: "10.66.66.2", PrivKey: clientPriv, PubKey: clientPub}}, Passwords: map[string]*PasswordEntry{password: {DeviceID: "fixture", DeviceIDs: []string{"fixture"}, MaxDevices: 1, ExpiresAt: time.Now().Add(5 * time.Minute).Unix()}}}
+	fixtureLifetime := 5*time.Minute
+	if os.Getenv("WDTT_MEMORY_LAB")=="1" {fixtureLifetime=31*time.Minute} // test-only synthetic soak credentials
+	db = &Database{Devices: map[string]*ClientDevice{"fixture": {DeviceID: "fixture", IP: "10.66.66.2", PrivKey: clientPriv, PubKey: clientPub}}, Passwords: map[string]*PasswordEntry{password: {DeviceID: "fixture", DeviceIDs: []string{"fixture"}, MaxDevices: 1, ExpiresAt: time.Now().Add(fixtureLifetime).Unix()}}}
 	dbFile = filepath.Join(dir, "server-db.json")
 	dns = "10.66.66.1"
 	if err = serverWrapKeys.SetPasswords("", []string{password}); err != nil {
@@ -70,7 +72,19 @@ func TestLocalPairHarness(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer tcp.Close()
-	httpServer := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("WDTT-LOCAL-TCP-OK\n")) })}
+	httpServer := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if os.Getenv("WDTT_MEMORY_LAB")=="1" && r.URL.Path=="/memory-upload" {
+			n,err:=io.Copy(io.Discard,io.LimitReader(r.Body,1048577))
+			if err!=nil || n!=1048576 {w.WriteHeader(400);return}
+			_,_=w.Write([]byte("UPLOAD-OK\n"));return
+		}
+		if os.Getenv("WDTT_MEMORY_LAB")=="1" && r.URL.Path=="/memory-bulk" {
+			w.Header().Set("Content-Length","1048576")
+			chunk:=make([]byte,64*1024);for i:=range chunk{chunk[i]=1}
+			for i:=0;i<16;i++{if _,err:=w.Write(chunk);err!=nil{return}};return
+		}
+		_, _ = w.Write([]byte("WDTT-LOCAL-TCP-OK\n"))
+	})}
 	defer httpServer.Close()
 	go httpServer.Serve(tcp)
 	echo, err := tnet.ListenUDP(&net.UDPAddr{IP: net.ParseIP("10.66.66.1"), Port: 18081})
@@ -222,7 +236,9 @@ func TestLocalPairHarness(t *testing.T) {
 	// Persist only numeric WG metrics, never IPC keys or raw configuration.
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
-	limit := time.After(3 * time.Minute)
+	fixtureRunLimit := 3*time.Minute
+	if os.Getenv("WDTT_MEMORY_LAB")=="1" {fixtureRunLimit=31*time.Minute}
+	limit := time.After(fixtureRunLimit)
 	for {
 		select {
 		case <-limit:

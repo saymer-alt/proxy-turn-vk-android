@@ -24,24 +24,31 @@ def main():
  # Every modified client source has an exact Git blob pin; the remaining
  # Phase4 source equivalence guard below is still enforced unchanged.
  diagnostic_blobs={
+  'tools/check_lowmem_session.py':'378d496aaf99d393a5797a996c8390a318ddaa79',
+  'go_client/testdata/lowmem-wrap-golden.json':'e69c72022a0a1fb82e14992165126cb9347e0573',
+  'go_client/lowmem_session_lab_test.go':'cc749529a9c947048ad8a830639afa28502304e6',
+  'go_client/lowmem_lab_test.go':'5ff7215bc5103f65dc026655aa2c17c0e56dbe49',
+  'go_client/lowmem_regression_test.go':'b691429132852b1640131c6130e9f796f82e65e3',
+  'go_client/lowmem_admission.go':'462ffcbfe6ba0b86dc703941c62fd464d64ce831',
+  'go_client/obfs.go':'556c316f2ae715bdb583bff6cb5d676891f8b751',
   'go_client/main.go':'2e553d4ca3ab97c7876b8f31b68bee79cff9791d',
-  'go_client/lab_security.go':'bad16b19f47e8cd6c66ade57b9c16fbdf8712785',
-  'go_client/session.go':'81febbe4125d585eb8d9db35b43117597ce70228',
+  'go_client/lab_security.go':'ab580beb0b1b1cf5ca5a44156a6fdf1f228853be',
+  'go_client/session.go':'a941ba08be8e607eb8d538e5e43bbf2630c1caae',
   'go_client/lab_getconf_status_test.go':'53e1fc751237d11555c1b64506a643bba0e956a5',
   'go_client/socks5.go':'83dd16836debb08a58a8452e090a49d9b130acf8',
   'go_client/lab_socks_mode_test.go':'70e555096897d2b672b3d9e39828cc64088a6311',
-  'go_client/qwdtt_import.go':'a7fc4907066b82624f975b0a8d26c8eab2585e93',
+  'go_client/qwdtt_import.go':'58ac5873c87ad82255d5578ac4f98f48854b251a',
   'go_client/qwdtt_anonymous9_test.go':'4ddd6f02ef56a9a4e4ce65200c2220f99f411919',
   'go_client/qwdtt_anonymous16_18_test.go':'082009c877b01d87c7a1902dcc6c7c97a75d23bc',
   'go_client/socks_service.go':'11f3f6e0f8d3e908e1247f990d9bc2e52809f71c',
-  'go_client/socks_udp_associate.go':'c359839697728866dfd39416560cc917c67fc054',
+  'go_client/socks_udp_associate.go':'0dea818d57e28332677efbbef52a09852c54b685',
   'go_client/socks_udp_associate_test.go':'831a65d2720dfab7cca8c4eb2800e6ed81f12551',
   'go_client/socks_telemetry.go':'771afa9db59f5a71d1ae1d23fc4737b11701a346',
   'go_client/socks_telemetry_test.go':'165a3f75287a21522cfc4ccff35c2dc6217033ce',
   'go_client/socks_lifecycle_telemetry.go':'fb3aaf91cdebbb41ff12766cd0c14aad3f9c80d2',
-  'go_client/socks_relay.go':'5ca1e60db99957636c8756ab9c4c5872bc3fa637',
+  'go_client/socks_relay.go':'43cedc81e33e44b596546de379532812acfbcd02',
   'go_client/socks_relay_test.go':'ddb4a724f5e06d5774a4eb0bb9e0e32a8634adbf',
-  'hardened-relay/server_pair_fixture_test.go':'2c29f2276dcc699bc2b9863e995b712a572d460c',
+  'hardened-relay/server_pair_fixture_test.go':'d5d1cb28d9def1924c71a2fcda6cd43ae662acb5',
   'tools/check_socks_udp_pair.py':'2523ec173a79f16c4f697015024dcab67e893142',
  }
  for name,blob in diagnostic_blobs.items():
@@ -83,7 +90,7 @@ def main():
  replacement+="    assert external(old)==external(new), 'THIRD_PARTY_SOURCE_CHANGED'\n"
  replacement+="    prefix=lambda path:path.read_text().split('===== SELECTED SOURCE COPYRIGHT HEADERS =====')[0]\n"
  replacement+="    assert prefix(work.parent/'base-inventory/NOTICE-COLLECTION.txt')==prefix(work/'license-evidence/NOTICE-COLLECTION.txt'), 'LICENSE_TEXT_CHANGED'\n"
- replacement+="    report['candidate_comparison']={'client_sha256_before':baseline['client_sha256'],'client_sha256_after':expected,'independent_candidate_rebuild_identical':True,'relay_identical':True,'third_party_sources_and_notices_identical':True,'local_source_inventory_changed':True,'reason':'explicit qWDTT and fixed-loopback SOCKS5 TCP/UDP plus aggregate-only owner telemetry; ARM64 high-memory retains 64 admission slots, MIPSel 32; fixed lifecycle instrumentation and bounded bidirectional TCP teardown with last-write idle deadlines, ctx cancellation and TCP half-close; source SHA-pinned, remote wire protocol unchanged'}\n"
+ replacement+="    report['candidate_comparison']={'client_sha256_before':baseline['client_sha256'],'client_sha256_after':expected,'independent_candidate_rebuild_identical':True,'relay_identical':True,'third_party_sources_and_notices_identical':True,'local_source_inventory_changed':True,'reason':'explicit qWDTT and fixed-loopback SOCKS5 TCP/UDP with v2 owner telemetry, unchanged 32/64 and UDP 4 caps; bounded TCP teardown/half-close retained; session-private WRAP/UDP scratch and effective 16KiB TCP copies; unchanged memory floors checked at import and runtime for 9/16/18 and account workers; exact source blob pins, unchanged remote wire protocol'}\n"
  build.write_text(text[:start]+replacement+text[end:])
  built=work/'build'
  run(['python3',build,'--go',go,'--sdk-archive',pathlib.Path(a.sdk).resolve(),'--work',built,'--source',ROOT,'--cache',work/'gocache','--modules',work/'gopath'])

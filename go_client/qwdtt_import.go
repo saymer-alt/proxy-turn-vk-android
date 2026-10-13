@@ -235,28 +235,26 @@ func qParse(raw []byte, o qOptions, availableKiB int64) (labConfig, string, erro
 		if workers > 4 || o.MaxWorkers < 1 || o.MaxWorkers > 4 || workers > o.MaxWorkers {
 			return reject("WORKER_BUDGET_EXCEEDED")
 		}
-		if availableKiB < 98304+int64(workers-1)*16384 {
-			return reject("DEVICE_MEMORY_INSUFFICIENT")
-		}
 	case "anonymous":
 		if o.Credentials != "" || o.MaxWorkers != workers {
 			return reject("ANONYMOUS_WORKER_POLICY_UNRESOLVED")
 		}
 		switch {
 		case workers == 9 && len(hashes) == 1:
-			if availableKiB < 131072 { return reject("DEVICE_MEMORY_INSUFFICIENT") }
 			runtimeWorkers = 12 // legacy pinned runtime: 12 requested -> 9 effective.
 		case workers == 16 && len(hashes) == 1:
-			if availableKiB < 147456 { return reject("DEVICE_MEMORY_INSUFFICIENT") }
 			runtimeWorkers = 16 // exact 9+7 only in trusted lab variant.
 		case workers == 18 && len(hashes) == 2:
-			if availableKiB < 155648 { return reject("DEVICE_MEMORY_INSUFFICIENT") }
 			runtimeWorkers = 18 // exact 9+9, hashes alternate by group index.
 		default:
 			return reject("ANONYMOUS_WORKER_POLICY_UNRESOLVED")
 		}
 	default:
 		return reject("AUTH_INVALID")
+	}
+	minimum, admitted := wdttMemoryMinimum(o.Auth, workers)
+	if !admitted || availableKiB < minimum {
+		return reject("DEVICE_MEMORY_INSUFFICIENT")
 	}
 	seen := map[string]bool{}
 	for i, h := range hashes {

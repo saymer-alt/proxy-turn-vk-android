@@ -1,0 +1,192 @@
+{
+  "scope": "one concurrent 30min pair, disjoint two-CPU affinity, native Linux amd64, synthetic actual TURN/DTLS/WG/SOCKS; original immediate-burst driver; NOT shipping main exit75 or hardware",
+  "baseline": "dc78576bcc7593ad52b30334bd46670571753be1",
+  "runs": {
+    "baseline": {
+      "passed": true,
+      "scope": "native test process, real 9/18 RunSession TURN/DTLS/WG/SOCKS; synthetic credential provider, no VK or hardware",
+      "workers": 18,
+      "soak": true,
+      "bulk_bytes": 880803840,
+      "udp_payload_bytes": 16800000,
+      "elapsed_seconds": 1794.300049537,
+      "terminal": "TIME_LIMIT",
+      "rounds": 30,
+      "hwm_kib": 149644,
+      "max_elapsed_ms": 1800300,
+      "phases": {
+        "starting_real_sessions": {
+          "RSS": 22956,
+          "HeapAlloc": 32547600,
+          "HeapInuse": 33595392,
+          "HeapSys": 36438016,
+          "StackInuse": 1802240,
+          "Goroutines": 265,
+          "FDs": 34,
+          "Swap": 0,
+          "NumGC": 4
+        },
+        "idle_real_sessions": {
+          "RSS": 30028,
+          "HeapAlloc": 36315656,
+          "HeapInuse": 37560320,
+          "HeapSys": 43679744,
+          "StackInuse": 2457600,
+          "Goroutines": 316,
+          "FDs": 70,
+          "Swap": 0,
+          "NumGC": 4
+        },
+        "loaded_real_sessions": {
+          "RSS": 149644,
+          "HeapAlloc": 149203376,
+          "HeapInuse": 154542080,
+          "HeapSys": 165019648,
+          "StackInuse": 3637248,
+          "Goroutines": 419,
+          "FDs": 71,
+          "Swap": 0,
+          "NumGC": 257
+        },
+        "idle_after_real_load": {
+          "RSS": 105816,
+          "HeapAlloc": 96278576,
+          "HeapInuse": 99762176,
+          "HeapSys": 165019648,
+          "StackInuse": 3473408,
+          "Goroutines": 359,
+          "FDs": 70,
+          "Swap": 0,
+          "NumGC": 257
+        },
+        "after_real_session_release": {
+          "RSS": 70464,
+          "HeapAlloc": 26781664,
+          "HeapInuse": 30392320,
+          "HeapSys": 166002688,
+          "StackInuse": 1867776,
+          "Goroutines": 3,
+          "FDs": 9,
+          "Swap": 0,
+          "NumGC": 258
+        }
+      },
+      "final": {
+        "phase": "after_real_session_release",
+        "elapsed_ms": 1800300,
+        "RSS": 70464,
+        "HWM": 149348,
+        "Swap": 0,
+        "Available": 7097112,
+        "HeapAlloc": 26781664,
+        "HeapInuse": 30392320,
+        "HeapSys": 166002688,
+        "StackInuse": 1769472,
+        "TotalAlloc": 12307887736,
+        "NumGC": 258,
+        "Goroutines": 3,
+        "FDs": 9,
+        "PSIMemorySome": 0,
+        "PSIIOFull": 0.03,
+        "CgroupCurrent": 1982791680
+      },
+      "median_tcp_seconds": 2.865517275000002,
+      "max_tcp_seconds": 19.75073285099984,
+      "sampled_cpu_user_seconds": 84.98,
+      "sampled_cpu_system_seconds": 49.8
+    },
+    "candidate": {
+      "passed": true,
+      "scope": "native test process, real 9/18 RunSession TURN/DTLS/WG/SOCKS; synthetic credential provider, no VK or hardware",
+      "workers": 18,
+      "soak": true,
+      "bulk_bytes": 880803840,
+      "udp_payload_bytes": 16800000,
+      "elapsed_seconds": 1794.287875937,
+      "terminal": "TIME_LIMIT",
+      "rounds": 30,
+      "hwm_kib": 146772,
+      "max_elapsed_ms": 1800300,
+      "phases": {
+        "starting_real_sessions": {
+          "RSS": 23140,
+          "HeapAlloc": 32580240,
+          "HeapInuse": 33554432,
+          "HeapSys": 36110336,
+          "StackInuse": 1867776,
+          "Goroutines": 265,
+          "FDs": 34,
+          "Swap": 0,
+          "NumGC": 4
+        },
+        "idle_real_sessions": {
+          "RSS": 24956,
+          "HeapAlloc": 34361856,
+          "HeapInuse": 35348480,
+          "HeapSys": 35815424,
+          "StackInuse": 1933312,
+          "Goroutines": 278,
+          "FDs": 34,
+          "Swap": 0,
+          "NumGC": 4
+        },
+        "loaded_real_sessions": {
+          "RSS": 146772,
+          "HeapAlloc": 142208608,
+          "HeapInuse": 146939904,
+          "HeapSys": 156598272,
+          "StackInuse": 3964928,
+          "Goroutines": 420,
+          "FDs": 70,
+          "Swap": 0,
+          "NumGC": 243
+        },
+        "idle_after_real_load": {
+          "RSS": 114748,
+          "HeapAlloc": 95586528,
+          "HeapInuse": 99467264,
+          "HeapSys": 156663808,
+          "StackInuse": 3473408,
+          "Goroutines": 344,
+          "FDs": 66,
+          "Swap": 0,
+          "NumGC": 244
+        },
+        "after_real_session_release": {
+          "RSS": 76800,
+          "HeapAlloc": 26495896,
+          "HeapInuse": 30285824,
+          "HeapSys": 157679616,
+          "StackInuse": 1769472,
+          "Goroutines": 3,
+          "FDs": 9,
+          "Swap": 0,
+          "NumGC": 245
+        }
+      },
+      "final": {
+        "phase": "after_real_session_release",
+        "elapsed_ms": 1800300,
+        "RSS": 30840,
+        "HWM": 146588,
+        "Swap": 0,
+        "Available": 7097112,
+        "HeapAlloc": 26495896,
+        "HeapInuse": 30285824,
+        "HeapSys": 157679616,
+        "StackInuse": 1703936,
+        "TotalAlloc": 11589966776,
+        "NumGC": 245,
+        "Goroutines": 3,
+        "FDs": 9,
+        "PSIMemorySome": 0,
+        "PSIIOFull": 0.03,
+        "CgroupCurrent": 1982791680
+      },
+      "median_tcp_seconds": 2.796431010999868,
+      "max_tcp_seconds": 28.911230966999938,
+      "sampled_cpu_user_seconds": 83.16,
+      "sampled_cpu_system_seconds": 50.43
+    }
+  }
+}

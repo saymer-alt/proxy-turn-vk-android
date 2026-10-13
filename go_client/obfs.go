@@ -119,6 +119,12 @@ func obfsBuildNonce(ssrc uint32, seq uint16, ts uint32) []byte {
 //
 //	[V=2,P=1,X=0,CC=0 | PT | SeqNum | Timestamp | SSRC | encrypted_payload | padding | padLen]
 func obfsWrapPacket(key, payload []byte, cfg *ObfsConfig, state *ObfsState) ([]byte, error) {
+	return obfsWrapPacketInto(nil, key, payload, cfg, state)
+}
+
+// The caller owns dst exclusively until the synchronous UDP WriteTo returns.
+// Payload must not alias dst. No global pool, nonce or wire-format change.
+func obfsWrapPacketInto(dst, key, payload []byte, cfg *ObfsConfig, state *ObfsState) ([]byte, error) {
 	if len(key) != wrapKeyLen {
 		return nil, fmt.Errorf("obfs: key must be %d bytes (got %d)", wrapKeyLen, len(key))
 	}
@@ -148,7 +154,12 @@ func obfsWrapPacket(key, payload []byte, cfg *ObfsConfig, state *ObfsState) ([]b
 
 	// Allocate output: 12 (header) + payload + AEAD tag + padTotal
 	outLen := 12 + len(payload) + chacha20poly1305.Overhead + padTotal
-	out := make([]byte, outLen)
+	var out []byte
+	if cap(dst) >= outLen {
+		out = dst[:outLen]
+	} else {
+		out = make([]byte, outLen)
+	}
 
 	// RTP Header (12 bytes)
 	out[0] = 0x80 | 0x20 // V=2, P=1 (padding present)

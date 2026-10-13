@@ -1,0 +1,644 @@
+{
+  "scope": "native Linux amd64 component harness; NOT ARM64 hardware, NOT 9/18-worker TURN/VK E2E",
+  "baseline": "dc78576bcc7593ad52b30334bd46670571753be1",
+  "runs": {
+    "baseline": [
+      {
+        "peak_hwm_kib": 50188,
+        "peak_sampled_rss_kib": 50184,
+        "min_host_available_kib": 7244648,
+        "max_total_alloc_bytes": 1616751216,
+        "final": {
+          "phase": "after_all_release",
+          "elapsed_ms": 13715,
+          "RSS": 32072,
+          "HWM": 50064,
+          "Swap": 0,
+          "Available": 7293336,
+          "HeapAlloc": 26816656,
+          "HeapInuse": 27729920,
+          "HeapSys": 65404928,
+          "StackInuse": 1703936,
+          "TotalAlloc": 1616751216,
+          "NumGC": 76,
+          "Goroutines": 2,
+          "FDs": 9,
+          "PSIMemorySome": 0,
+          "PSIIOFull": 0,
+          "CgroupCurrent": 165097472
+        },
+        "phases": {
+          "idle_process": {
+            "max_rss_kib": 10944,
+            "max_heap_alloc_bytes": 399960,
+            "max_goroutines": 2,
+            "max_fds": 9
+          },
+          "idle_wireguard_netstack": {
+            "max_rss_kib": 14664,
+            "max_heap_alloc_bytes": 26594456,
+            "max_goroutines": 19,
+            "max_fds": 14
+          },
+          "saturated_queue_socket_model_9": {
+            "max_rss_kib": 17832,
+            "max_heap_alloc_bytes": 29178976,
+            "max_goroutines": 19,
+            "max_fds": 23
+          },
+          "after_queue_release": {
+            "max_rss_kib": 20584,
+            "max_heap_alloc_bytes": 30574416,
+            "max_goroutines": 19,
+            "max_fds": 14
+          },
+          "saturated_queue_socket_model_18": {
+            "max_rss_kib": 20424,
+            "max_heap_alloc_bytes": 31735560,
+            "max_goroutines": 19,
+            "max_fds": 32
+          },
+          "held_tcp_relay_32": {
+            "max_rss_kib": 22284,
+            "max_heap_alloc_bytes": 34651584,
+            "max_goroutines": 211,
+            "max_fds": 79
+          },
+          "after_tcp_release": {
+            "max_rss_kib": 23856,
+            "max_heap_alloc_bytes": 27036920,
+            "max_goroutines": 19,
+            "max_fds": 14
+          },
+          "held_tcp_relay_64": {
+            "max_rss_kib": 23692,
+            "max_heap_alloc_bytes": 32699352,
+            "max_goroutines": 403,
+            "max_fds": 143
+          },
+          "wrap_packet_churn": {
+            "max_rss_kib": 44744,
+            "max_heap_alloc_bytes": 50135984,
+            "max_goroutines": 19,
+            "max_fds": 14
+          },
+          "udp_reply_churn_four_scratch_slots": {
+            "max_rss_kib": 50184,
+            "max_heap_alloc_bytes": 53620152,
+            "max_goroutines": 19,
+            "max_fds": 14
+          },
+          "after_all_release": {
+            "max_rss_kib": 45820,
+            "max_heap_alloc_bytes": 26816656,
+            "max_goroutines": 2,
+            "max_fds": 9
+          }
+        },
+        "benchmarks": {
+          "BenchmarkLowmemWrap": {
+            "ns_op": 2516.0,
+            "bytes_op": 1584,
+            "allocs_op": 3
+          },
+          "BenchmarkLowmemUDPReply": {
+            "ns_op": 501.4,
+            "bytes_op": 1536,
+            "allocs_op": 1
+          }
+        }
+      },
+      {
+        "peak_hwm_kib": 52728,
+        "peak_sampled_rss_kib": 52728,
+        "min_host_available_kib": 7314344,
+        "max_total_alloc_bytes": 1616752832,
+        "final": {
+          "phase": "after_all_release",
+          "elapsed_ms": 13617,
+          "RSS": 35844,
+          "HWM": 52536,
+          "Swap": 0,
+          "Available": 7317284,
+          "HeapAlloc": 26863280,
+          "HeapInuse": 27811840,
+          "HeapSys": 69632000,
+          "StackInuse": 1671168,
+          "TotalAlloc": 1616752832,
+          "NumGC": 74,
+          "Goroutines": 2,
+          "FDs": 9,
+          "PSIMemorySome": 0,
+          "PSIIOFull": 0,
+          "CgroupCurrent": 170352640
+        },
+        "phases": {
+          "idle_process": {
+            "max_rss_kib": 10952,
+            "max_heap_alloc_bytes": 400280,
+            "max_goroutines": 2,
+            "max_fds": 9
+          },
+          "idle_wireguard_netstack": {
+            "max_rss_kib": 14808,
+            "max_heap_alloc_bytes": 26553080,
+            "max_goroutines": 19,
+            "max_fds": 14
+          },
+          "saturated_queue_socket_model_9": {
+            "max_rss_kib": 18316,
+            "max_heap_alloc_bytes": 30010416,
+            "max_goroutines": 19,
+            "max_fds": 23
+          },
+          "after_queue_release": {
+            "max_rss_kib": 20456,
+            "max_heap_alloc_bytes": 30574080,
+            "max_goroutines": 19,
+            "max_fds": 14
+          },
+          "saturated_queue_socket_model_18": {
+            "max_rss_kib": 20236,
+            "max_heap_alloc_bytes": 31733088,
+            "max_goroutines": 19,
+            "max_fds": 32
+          },
+          "held_tcp_relay_32": {
+            "max_rss_kib": 22192,
+            "max_heap_alloc_bytes": 34642232,
+            "max_goroutines": 211,
+            "max_fds": 79
+          },
+          "after_tcp_release": {
+            "max_rss_kib": 22372,
+            "max_heap_alloc_bytes": 27036664,
+            "max_goroutines": 19,
+            "max_fds": 14
+          },
+          "held_tcp_relay_64": {
+            "max_rss_kib": 21932,
+            "max_heap_alloc_bytes": 32708616,
+            "max_goroutines": 403,
+            "max_fds": 143
+          },
+          "wrap_packet_churn": {
+            "max_rss_kib": 44872,
+            "max_heap_alloc_bytes": 50562272,
+            "max_goroutines": 19,
+            "max_fds": 14
+          },
+          "udp_reply_churn_four_scratch_slots": {
+            "max_rss_kib": 52728,
+            "max_heap_alloc_bytes": 59225120,
+            "max_goroutines": 19,
+            "max_fds": 14
+          },
+          "after_all_release": {
+            "max_rss_kib": 50236,
+            "max_heap_alloc_bytes": 26863280,
+            "max_goroutines": 2,
+            "max_fds": 9
+          }
+        },
+        "benchmarks": {
+          "BenchmarkLowmemWrap": {
+            "ns_op": 2512.0,
+            "bytes_op": 1584,
+            "allocs_op": 3
+          },
+          "BenchmarkLowmemUDPReply": {
+            "ns_op": 496.3,
+            "bytes_op": 1536,
+            "allocs_op": 1
+          }
+        }
+      },
+      {
+        "peak_hwm_kib": 50456,
+        "peak_sampled_rss_kib": 50088,
+        "min_host_available_kib": 7137648,
+        "max_total_alloc_bytes": 1616883584,
+        "final": {
+          "phase": "after_all_release",
+          "elapsed_ms": 13791,
+          "RSS": 24092,
+          "HWM": 50456,
+          "Swap": 0,
+          "Available": 7273176,
+          "HeapAlloc": 26798704,
+          "HeapInuse": 27639808,
+          "HeapSys": 65961984,
+          "StackInuse": 1146880,
+          "TotalAlloc": 1616883584,
+          "NumGC": 76,
+          "Goroutines": 2,
+          "FDs": 9,
+          "PSIMemorySome": 0,
+          "PSIIOFull": 0.14,
+          "CgroupCurrent": 229744640
+        },
+        "phases": {
+          "idle_process": {
+            "max_rss_kib": 10976,
+            "max_heap_alloc_bytes": 406080,
+            "max_goroutines": 2,
+            "max_fds": 9
+          },
+          "idle_wireguard_netstack": {
+            "max_rss_kib": 14784,
+            "max_heap_alloc_bytes": 26602960,
+            "max_goroutines": 19,
+            "max_fds": 14
+          },
+          "saturated_queue_socket_model_9": {
+            "max_rss_kib": 17728,
+            "max_heap_alloc_bytes": 29142288,
+            "max_goroutines": 19,
+            "max_fds": 23
+          },
+          "after_queue_release": {
+            "max_rss_kib": 20408,
+            "max_heap_alloc_bytes": 30584120,
+            "max_goroutines": 19,
+            "max_fds": 14
+          },
+          "saturated_queue_socket_model_18": {
+            "max_rss_kib": 20220,
+            "max_heap_alloc_bytes": 31734576,
+            "max_goroutines": 19,
+            "max_fds": 32
+          },
+          "held_tcp_relay_32": {
+            "max_rss_kib": 22188,
+            "max_heap_alloc_bytes": 34643224,
+            "max_goroutines": 211,
+            "max_fds": 79
+          },
+          "after_tcp_release": {
+            "max_rss_kib": 22832,
+            "max_heap_alloc_bytes": 27028168,
+            "max_goroutines": 19,
+            "max_fds": 14
+          },
+          "held_tcp_relay_64": {
+            "max_rss_kib": 22560,
+            "max_heap_alloc_bytes": 32704872,
+            "max_goroutines": 403,
+            "max_fds": 143
+          },
+          "wrap_packet_churn": {
+            "max_rss_kib": 44584,
+            "max_heap_alloc_bytes": 50449288,
+            "max_goroutines": 19,
+            "max_fds": 14
+          },
+          "udp_reply_churn_four_scratch_slots": {
+            "max_rss_kib": 50088,
+            "max_heap_alloc_bytes": 56559712,
+            "max_goroutines": 19,
+            "max_fds": 14
+          },
+          "after_all_release": {
+            "max_rss_kib": 46064,
+            "max_heap_alloc_bytes": 26798704,
+            "max_goroutines": 2,
+            "max_fds": 9
+          }
+        },
+        "benchmarks": {
+          "BenchmarkLowmemWrap": {
+            "ns_op": 2623.0,
+            "bytes_op": 1584,
+            "allocs_op": 3
+          },
+          "BenchmarkLowmemUDPReply": {
+            "ns_op": 505.1,
+            "bytes_op": 1536,
+            "allocs_op": 1
+          }
+        }
+      }
+    ],
+    "candidate": [
+      {
+        "peak_hwm_kib": 36292,
+        "peak_sampled_rss_kib": 36292,
+        "min_host_available_kib": 7335212,
+        "max_total_alloc_bytes": 77352288,
+        "final": {
+          "phase": "after_all_release",
+          "elapsed_ms": 13293,
+          "RSS": 36292,
+          "HWM": 36292,
+          "Swap": 0,
+          "Available": 7338424,
+          "HeapAlloc": 26806720,
+          "HeapInuse": 27795456,
+          "HeapSys": 49184768,
+          "StackInuse": 1146880,
+          "TotalAlloc": 77352288,
+          "NumGC": 10,
+          "Goroutines": 2,
+          "FDs": 9,
+          "PSIMemorySome": 0,
+          "PSIIOFull": 0,
+          "CgroupCurrent": 170295296
+        },
+        "phases": {
+          "idle_process": {
+            "max_rss_kib": 10968,
+            "max_heap_alloc_bytes": 400776,
+            "max_goroutines": 2,
+            "max_fds": 9
+          },
+          "idle_wireguard_netstack": {
+            "max_rss_kib": 14764,
+            "max_heap_alloc_bytes": 26593592,
+            "max_goroutines": 19,
+            "max_fds": 14
+          },
+          "saturated_queue_socket_model_9": {
+            "max_rss_kib": 17612,
+            "max_heap_alloc_bytes": 29135472,
+            "max_goroutines": 19,
+            "max_fds": 23
+          },
+          "after_queue_release": {
+            "max_rss_kib": 20488,
+            "max_heap_alloc_bytes": 30583736,
+            "max_goroutines": 19,
+            "max_fds": 14
+          },
+          "saturated_queue_socket_model_18": {
+            "max_rss_kib": 20292,
+            "max_heap_alloc_bytes": 31733968,
+            "max_goroutines": 19,
+            "max_fds": 32
+          },
+          "held_tcp_relay_32": {
+            "max_rss_kib": 22020,
+            "max_heap_alloc_bytes": 33594344,
+            "max_goroutines": 211,
+            "max_fds": 79
+          },
+          "after_tcp_release": {
+            "max_rss_kib": 22188,
+            "max_heap_alloc_bytes": 27037192,
+            "max_goroutines": 19,
+            "max_fds": 14
+          },
+          "held_tcp_relay_64": {
+            "max_rss_kib": 20980,
+            "max_heap_alloc_bytes": 30604640,
+            "max_goroutines": 403,
+            "max_fds": 143
+          },
+          "wrap_packet_churn": {
+            "max_rss_kib": 35780,
+            "max_heap_alloc_bytes": 45433928,
+            "max_goroutines": 19,
+            "max_fds": 14
+          },
+          "udp_reply_churn_four_scratch_slots": {
+            "max_rss_kib": 35824,
+            "max_heap_alloc_bytes": 40995936,
+            "max_goroutines": 19,
+            "max_fds": 14
+          },
+          "after_all_release": {
+            "max_rss_kib": 36292,
+            "max_heap_alloc_bytes": 26806720,
+            "max_goroutines": 2,
+            "max_fds": 9
+          }
+        },
+        "benchmarks": {
+          "BenchmarkLowmemWrap": {
+            "ns_op": 2024.0,
+            "bytes_op": 48,
+            "allocs_op": 2
+          },
+          "BenchmarkLowmemUDPReply": {
+            "ns_op": 51.66,
+            "bytes_op": 0,
+            "allocs_op": 0
+          }
+        }
+      },
+      {
+        "peak_hwm_kib": 36844,
+        "peak_sampled_rss_kib": 36840,
+        "min_host_available_kib": 7319572,
+        "max_total_alloc_bytes": 77375856,
+        "final": {
+          "phase": "after_all_release",
+          "elapsed_ms": 13400,
+          "RSS": 36840,
+          "HWM": 36844,
+          "Swap": 0,
+          "Available": 7321448,
+          "HeapAlloc": 26811264,
+          "HeapInuse": 27713536,
+          "HeapSys": 53149696,
+          "StackInuse": 1376256,
+          "TotalAlloc": 77375856,
+          "NumGC": 10,
+          "Goroutines": 2,
+          "FDs": 9,
+          "PSIMemorySome": 0,
+          "PSIIOFull": 0,
+          "CgroupCurrent": 198242304
+        },
+        "phases": {
+          "idle_process": {
+            "max_rss_kib": 10968,
+            "max_heap_alloc_bytes": 400296,
+            "max_goroutines": 2,
+            "max_fds": 9
+          },
+          "idle_wireguard_netstack": {
+            "max_rss_kib": 15164,
+            "max_heap_alloc_bytes": 26215432,
+            "max_goroutines": 19,
+            "max_fds": 14
+          },
+          "saturated_queue_socket_model_9": {
+            "max_rss_kib": 18172,
+            "max_heap_alloc_bytes": 29528600,
+            "max_goroutines": 19,
+            "max_fds": 23
+          },
+          "after_queue_release": {
+            "max_rss_kib": 20708,
+            "max_heap_alloc_bytes": 30574304,
+            "max_goroutines": 19,
+            "max_fds": 14
+          },
+          "saturated_queue_socket_model_18": {
+            "max_rss_kib": 20476,
+            "max_heap_alloc_bytes": 31733328,
+            "max_goroutines": 19,
+            "max_fds": 32
+          },
+          "held_tcp_relay_32": {
+            "max_rss_kib": 22284,
+            "max_heap_alloc_bytes": 33603472,
+            "max_goroutines": 211,
+            "max_fds": 79
+          },
+          "after_tcp_release": {
+            "max_rss_kib": 22440,
+            "max_heap_alloc_bytes": 27036712,
+            "max_goroutines": 19,
+            "max_fds": 14
+          },
+          "held_tcp_relay_64": {
+            "max_rss_kib": 21984,
+            "max_heap_alloc_bytes": 30604400,
+            "max_goroutines": 403,
+            "max_fds": 143
+          },
+          "wrap_packet_churn": {
+            "max_rss_kib": 36436,
+            "max_heap_alloc_bytes": 45433096,
+            "max_goroutines": 19,
+            "max_fds": 14
+          },
+          "udp_reply_churn_four_scratch_slots": {
+            "max_rss_kib": 36472,
+            "max_heap_alloc_bytes": 40995104,
+            "max_goroutines": 19,
+            "max_fds": 14
+          },
+          "after_all_release": {
+            "max_rss_kib": 36840,
+            "max_heap_alloc_bytes": 26811264,
+            "max_goroutines": 2,
+            "max_fds": 9
+          }
+        },
+        "benchmarks": {
+          "BenchmarkLowmemWrap": {
+            "ns_op": 2749.0,
+            "bytes_op": 48,
+            "allocs_op": 2
+          },
+          "BenchmarkLowmemUDPReply": {
+            "ns_op": 55.32,
+            "bytes_op": 0,
+            "allocs_op": 0
+          }
+        }
+      },
+      {
+        "peak_hwm_kib": 37120,
+        "peak_sampled_rss_kib": 37120,
+        "min_host_available_kib": 7324956,
+        "max_total_alloc_bytes": 77382064,
+        "final": {
+          "phase": "after_all_release",
+          "elapsed_ms": 13317,
+          "RSS": 37120,
+          "HWM": 37120,
+          "Swap": 0,
+          "Available": 7325540,
+          "HeapAlloc": 26821016,
+          "HeapInuse": 27836416,
+          "HeapSys": 52985856,
+          "StackInuse": 1540096,
+          "TotalAlloc": 77382064,
+          "NumGC": 10,
+          "Goroutines": 2,
+          "FDs": 9,
+          "PSIMemorySome": 0,
+          "PSIIOFull": 0.06,
+          "CgroupCurrent": 172707840
+        },
+        "phases": {
+          "idle_process": {
+            "max_rss_kib": 10968,
+            "max_heap_alloc_bytes": 400136,
+            "max_goroutines": 2,
+            "max_fds": 9
+          },
+          "idle_wireguard_netstack": {
+            "max_rss_kib": 14760,
+            "max_heap_alloc_bytes": 26593032,
+            "max_goroutines": 19,
+            "max_fds": 14
+          },
+          "saturated_queue_socket_model_9": {
+            "max_rss_kib": 18140,
+            "max_heap_alloc_bytes": 29123520,
+            "max_goroutines": 19,
+            "max_fds": 23
+          },
+          "after_queue_release": {
+            "max_rss_kib": 20500,
+            "max_heap_alloc_bytes": 30574096,
+            "max_goroutines": 19,
+            "max_fds": 14
+          },
+          "saturated_queue_socket_model_18": {
+            "max_rss_kib": 20308,
+            "max_heap_alloc_bytes": 31724328,
+            "max_goroutines": 19,
+            "max_fds": 32
+          },
+          "held_tcp_relay_32": {
+            "max_rss_kib": 22100,
+            "max_heap_alloc_bytes": 33594024,
+            "max_goroutines": 211,
+            "max_fds": 79
+          },
+          "after_tcp_release": {
+            "max_rss_kib": 22532,
+            "max_heap_alloc_bytes": 27037752,
+            "max_goroutines": 19,
+            "max_fds": 14
+          },
+          "held_tcp_relay_64": {
+            "max_rss_kib": 22532,
+            "max_heap_alloc_bytes": 30613816,
+            "max_goroutines": 403,
+            "max_fds": 143
+          },
+          "wrap_packet_churn": {
+            "max_rss_kib": 36624,
+            "max_heap_alloc_bytes": 45439456,
+            "max_goroutines": 19,
+            "max_fds": 14
+          },
+          "udp_reply_churn_four_scratch_slots": {
+            "max_rss_kib": 36644,
+            "max_heap_alloc_bytes": 40961352,
+            "max_goroutines": 19,
+            "max_fds": 14
+          },
+          "after_all_release": {
+            "max_rss_kib": 37120,
+            "max_heap_alloc_bytes": 26821016,
+            "max_goroutines": 2,
+            "max_fds": 9
+          }
+        },
+        "benchmarks": {
+          "BenchmarkLowmemWrap": {
+            "ns_op": 2071.0,
+            "bytes_op": 48,
+            "allocs_op": 2
+          },
+          "BenchmarkLowmemUDPReply": {
+            "ns_op": 52.46,
+            "bytes_op": 0,
+            "allocs_op": 0
+          }
+        }
+      }
+    ]
+  },
+  "baseline_median_hwm_kib": 50456,
+  "candidate_median_hwm_kib": 36844,
+  "cpu_affinity": "0,1",
+  "toolchain": "go version go1.26.1 linux/amd64"
+}

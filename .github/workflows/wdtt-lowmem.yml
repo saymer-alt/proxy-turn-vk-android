@@ -1,0 +1,84 @@
+name: WDTT low-memory source lab
+on:
+  pull_request:
+    branches: [feature/wdtt-tcp-idle-teardown-owner-20261012]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: wdtt-lowmem-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  lab:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          repository: saymer-alt/proxy-turn-vk-android
+          ref: ce2de92b91f692446a149eb1eb0880d0d2379f5a
+          path: health-consumer
+      - name: Pinned toolchain; no package or binary upload
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-user zstd gcc iproute2
+          curl -fL --retry 2 https://github.com/ownik/entware-sdk/releases/download/v2026.07.04/entware-sdk-aarch64-3.10_gcc-8.4.0_glibc-2.27.Linux-x86_64.tar.zst -o sdk.tar.zst
+          echo 'd51f30c126425ebff203b107a1a0aa9d3a5844f6c481bc6ff4c117cadc208674  sdk.tar.zst' | sha256sum -c -
+          mkdir sdk-root
+          tar --zstd -xf sdk.tar.zst -C sdk-root --wildcards --wildcards-match-slash '*staging_dir/host/go/*'
+          echo "GO_BIN=$(find "$PWD/sdk-root" -type f -path '*/host/go/bin/go')" >> "$GITHUB_ENV"
+          echo "GOPATH=$RUNNER_TEMP/lowmem-gopath" >> "$GITHUB_ENV"
+          echo "GOCACHE=$RUNNER_TEMP/lowmem-cache" >> "$GITHUB_ENV"
+      - name: Existing tests, race, unchanged health schema and cutoff
+        env:
+          GOENV: 'off'
+          GOTOOLCHAIN: local
+          GOWORK: 'off'
+          GOTELEMETRY: 'off'
+          GOMAXPROCS: '2'
+        run: |
+          set -euo pipefail
+          cd go_client
+          CGO_ENABLED=0 "$GO_BIN" test -mod=readonly -short -count=1 -timeout=120s ./...
+          CGO_ENABLED=1 CC=/usr/bin/gcc "$GO_BIN" test -mod=readonly -race -short -count=1 -timeout=180s ./...
+          cd ..
+          git diff --exit-code dc78576bcc7593ad52b30334bd46670571753be1 -- go_client/socks_telemetry.go go_client/socks_lifecycle_telemetry.go
+          python3 -c "from pathlib import Path; s=Path('go_client/lab_security.go').read_text(); assert 'time.Sleep(30 * time.Minute); labStatus(\"TIME_LIMIT\"); os.Exit(75)' in s"
+          cd health-consumer/go_client
+          CGO_ENABLED=1 CC=/usr/bin/gcc "$GO_BIN" test -mod=readonly -race -count=1 ./internal/health ./cmd/wdtt-health
+      - name: ARM64 and MIPSel softfloat execution under QEMU (not hardware RSS)
+        env:
+          GOENV: 'off'
+          GOTOOLCHAIN: local
+          GOWORK: 'off'
+          CGO_ENABLED: '0'
+          GOOS: linux
+          GOMIPS: softfloat
+          GOMAXPROCS: '2'
+        run: |
+          set -euo pipefail
+          cd go_client
+          GOARCH=arm64 "$GO_BIN" test -mod=readonly -trimpath -buildvcs=false -c -o "$RUNNER_TEMP/lowmem-arm64.test"
+          GOARCH=mipsle "$GO_BIN" test -mod=readonly -trimpath -buildvcs=false -c -o "$RUNNER_TEMP/lowmem-mipsle.test"
+          qemu-aarch64 "$RUNNER_TEMP/lowmem-arm64.test" -test.run '^TestLowmem' -test.timeout=120s
+          qemu-mipsel "$RUNNER_TEMP/lowmem-mipsle.test" -test.run '^TestLowmem' -test.timeout=120s
+          file "$RUNNER_TEMP"/lowmem-*.test
+          sha256sum "$RUNNER_TEMP"/lowmem-*.test
+      - name: Paired native memory and real loopback TURN/DTLS/WG/SOCKS lab
+        run: |
+          sudo --preserve-env=GOPATH,GOCACHE env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0="$PWD" python3 tools/check_lowmem_lab.py --go "$GO_BIN" --work "$RUNNER_TEMP/lowmem-private" --report-dir "$RUNNER_TEMP/lowmem-evidence" --sessions
+      - name: Numeric evidence only; never heap, binary or private configuration
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: wdtt-lowmem-numeric-evidence
+          path: |
+            ${{ runner.temp }}/lowmem-evidence/*.json
+            ${{ runner.temp }}/lowmem-evidence/*.jsonl
+            ${{ runner.temp }}/lowmem-evidence/*-bench.txt
+          if-no-files-found: warn
+          retention-days: 14

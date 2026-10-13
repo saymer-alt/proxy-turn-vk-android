@@ -31,12 +31,20 @@ func wdttDecodeUDPPacket(packet []byte) (wdttSocksTarget, []byte, error) {
 }
 
 func wdttEncodeUDPReply(addr *net.UDPAddr, payload []byte) ([]byte,error) {
+    return wdttEncodeUDPReplyInto(nil,addr,payload)
+}
+
+// Session-private scratch; WriteToUDP consumes it synchronously.
+func wdttEncodeUDPReplyInto(dst []byte,addr *net.UDPAddr, payload []byte) ([]byte,error) {
     if addr==nil || addr.Port<=0 || addr.Port>65535 || len(payload)>wdttMaxUDPPayload {
         return nil,errWDTTUDPFrame
     }
     ip:=addr.IP.To4()
     if ip==nil { return nil,errWDTTUDPFrame }
-    packet:=make([]byte,10+len(payload))
+    size:=10+len(payload)
+    var packet []byte
+    if cap(dst)>=size {packet=dst[:size]} else {packet=make([]byte,size)}
+    clear(packet[:10])
     packet[3]=1
     copy(packet[4:8],ip)
     binary.BigEndian.PutUint16(packet[8:10],uint16(addr.Port))
@@ -151,6 +159,7 @@ func wdttUDPAssociate(ctx context.Context, control net.Conn, tnet *netstack.Net,
     go func(){
         defer receivers.Done()
         buf:=make([]byte,wdttMaxUDPPayload+1)
+        var replyBuf []byte
         for {
             n,src,err:=outbound.ReadFrom(buf)
             if err!=nil {return}
@@ -158,8 +167,9 @@ func wdttUDPAssociate(ctx context.Context, control net.Conn, tnet *netstack.Net,
             if !ok || n>wdttMaxUDPPayload || !peers.expected(remote){wdttTelemetry.udpRepliesRejected.Add(1);continue}
             target:=peers.source()
             if target==nil{wdttTelemetry.udpRepliesRejected.Add(1);continue}
-            wrapped,err:=wdttEncodeUDPReply(remote,buf[:n])
+            wrapped,err:=wdttEncodeUDPReplyInto(replyBuf,remote,buf[:n])
             if err!=nil {wdttTelemetry.udpRepliesRejected.Add(1);continue}
+            replyBuf=wrapped
             if _,err=inbound.WriteToUDP(wrapped,target);err!=nil {wdttTelemetry.udpHostWriteFailed.Add(1)} else {
                 wdttTelemetry.udpRepliesDelivered.Add(1)
                 wdttTelemetry.udpReplyBytes.Add(uint64(n))

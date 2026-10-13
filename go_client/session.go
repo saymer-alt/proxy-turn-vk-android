@@ -238,6 +238,7 @@ func RunSession(
 		defer relayWg.Done()
 		defer sessCancel()
 		b := make([]byte, readBufSize)
+		var wrapBuf []byte // one outgoing relay goroutine owns the scratch buffer
 		for {
 			n, _, readErr := pipeA.ReadFrom(b)
 			if readErr != nil {
@@ -246,12 +247,13 @@ func RunSession(
 			out := b[:n]
 			if useWrap {
 				if obfsCfg != nil && obfsWriteState != nil {
-					wrapped, wrapErr := obfsWrapPacket(tp.WrapKey, out, obfsCfg, obfsWriteState)
+					wrapped, wrapErr := obfsWrapPacketInto(wrapBuf, tp.WrapKey, out, obfsCfg, obfsWriteState)
 					if wrapErr != nil {
 						log.Printf("[СЕССИЯ #%d] OBFS wrap: %v", sessionID, wrapErr)
 						return
 					}
 					out = wrapped
+					wrapBuf = wrapped
 				}
 			}
 			if atomic.CompareAndSwapUint32(&firstWrapDown, 0, 1) {

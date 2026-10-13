@@ -23,6 +23,9 @@ type wdttProgressWriter struct {
     progress func()
 }
 
+// Hide source WriterTo so CopyBuffer uses the supplied 16KiB, not an extra 32KiB.
+type wdttReaderOnly struct { io.Reader }
+
 func (w wdttProgressWriter) Write(p []byte) (int, error) {
     n, err := w.Conn.Write(p)
     if n > 0 { w.progress() }
@@ -83,7 +86,7 @@ func wdttRelayTCP(ctx context.Context, client, remote net.Conn, idle time.Durati
     copied := make(chan struct{}, 2)
     transfer := func(dst, src net.Conn, towardRemote bool) {
         writer := wdttProgressWriter{Conn: dst, progress: progress}
-        n, err := io.CopyBuffer(writer, src, make([]byte, 16*1024))
+        n, err := io.CopyBuffer(writer, wdttReaderOnly{src}, make([]byte, 16*1024))
         wdttLifeTransfer(towardRemote, n, err)
         if err != nil {
             // A failed stream cannot remain half-open forever. Closing BOTH

@@ -310,13 +310,9 @@ func main() {
 		os.Exit(78)
 	}
 	// Import-time RAM may differ from runtime: recheck before opening sockets.
-	if labCfg.Auth == "anonymous" && labCfg.QWDTTRequestedWorkers >= 16 {
-		minimum := int64(147456)
-		if labCfg.QWDTTRequestedWorkers == 18 { minimum = 155648 }
-		if qMemory() < minimum {
-			fmt.Fprintln(os.Stderr, "WDTT_QWDTT_RUNTIME_MEMORY_INSUFFICIENT")
-			os.Exit(78)
-		}
+	if !labRuntimeMemoryOK(labCfg, qMemory()) {
+		fmt.Fprintln(os.Stderr, "WDTT_QWDTT_RUNTIME_MEMORY_INSUFFICIENT")
+		os.Exit(78)
 	}
 	if labCfg.CredsFile != "" {
 		if _, err = labRead(labCfg.CredsFile); err != nil {

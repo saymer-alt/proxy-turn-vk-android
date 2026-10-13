@@ -1,0 +1,41 @@
+{
+  "baseline": "dc78576bcc7593ad52b30334bd46670571753be1",
+  "scope": "paired and soak test executables; runtime source canonical gofmt equivalence to PR; not a shipping binary SHA",
+  "runtime": {
+    "lab_security.go": {
+      "measured_lf_sha256": "f7bd44f284382b2f1e294d693ead96a64d0308a4a080783b3e4e1beab803d715",
+      "working_lf_sha256": "f7bd44f284382b2f1e294d693ead96a64d0308a4a080783b3e4e1beab803d715",
+      "canonical_gofmt_sha256": "f01230b1d41630d09c6cb6bba32c23419fa2d97f17c0703701b1f3aacf5eaadb"
+    },
+    "obfs.go": {
+      "measured_lf_sha256": "2c14f54302925059938df526b3738c24c85f3a3d9976e943b69b315bb0452568",
+      "working_lf_sha256": "2c14f54302925059938df526b3738c24c85f3a3d9976e943b69b315bb0452568",
+      "canonical_gofmt_sha256": "2c14f54302925059938df526b3738c24c85f3a3d9976e943b69b315bb0452568"
+    },
+    "qwdtt_import.go": {
+      "measured_lf_sha256": "46360003d615d52d8dcdd499ad7321826e79339315c909f2de306542e6f874f0",
+      "working_lf_sha256": "46360003d615d52d8dcdd499ad7321826e79339315c909f2de306542e6f874f0",
+      "canonical_gofmt_sha256": "46360003d615d52d8dcdd499ad7321826e79339315c909f2de306542e6f874f0"
+    },
+    "session.go": {
+      "measured_lf_sha256": "99f9dc9503c49c7ed6cf90901281375e13b9bea8234e839b1dea9786fd6de19b",
+      "working_lf_sha256": "99f9dc9503c49c7ed6cf90901281375e13b9bea8234e839b1dea9786fd6de19b",
+      "canonical_gofmt_sha256": "9cb37b514786583c834042da8c749a0018f81dc2aca89c1fe1ddadbe1998769c"
+    },
+    "socks_relay.go": {
+      "measured_lf_sha256": "670d343a7de9a904bbf7160cda1947c330139b4ef477bb2785a1addb80e6acb1",
+      "working_lf_sha256": "670d343a7de9a904bbf7160cda1947c330139b4ef477bb2785a1addb80e6acb1",
+      "canonical_gofmt_sha256": "62b540c5b8c645423367cf57119b71c10a3bcd328a34b6a3aaa149e01ba366f8"
+    },
+    "socks_udp_associate.go": {
+      "measured_lf_sha256": "ce8c1202ddb0aa448fe8166c57d2157576dcf2efda08f19e88c062d970fb1f0b",
+      "working_lf_sha256": "ce8c1202ddb0aa448fe8166c57d2157576dcf2efda08f19e88c062d970fb1f0b",
+      "canonical_gofmt_sha256": "3aacb93d0e65397e5254f64ee1415b37b4305cd3a580a8479d162eab9c67a4c2"
+    },
+    "lowmem_admission.go": {
+      "measured_lf_sha256": "f066d6dae7673e04911a26eebfbc7884bcda34c232df6bd058bb2bec7051d0d5",
+      "working_lf_sha256": "f066d6dae7673e04911a26eebfbc7884bcda34c232df6bd058bb2bec7051d0d5",
+      "canonical_gofmt_sha256": "f066d6dae7673e04911a26eebfbc7884bcda34c232df6bd058bb2bec7051d0d5"
+    }
+  }
+}
