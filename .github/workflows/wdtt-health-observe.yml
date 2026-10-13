@@ -36,8 +36,7 @@ jobs:
           done
           /tmp/wdtt-health-amd64 -h
           # Parent is PR #15; new monitor must not change any existing client source.
-          git diff --exit-code dc78576bcc7593ad52b30334bd46670571753be1 HEAD -- '*.go' ':!go_client/internal/health/*' ':!go_client/cmd/wdtt-health/*'
-          git diff --exit-code dc78576bcc7593ad52b30334bd46670571753be1 HEAD -- go_client/go.mod go_client/go.sum
+          git -C .. diff --exit-code dc78576bcc7593ad52b30334bd46670571753be1 HEAD -- go_client ':(exclude)go_client/internal/health/**' ':(exclude)go_client/cmd/wdtt-health/**'
           sha256sum /tmp/wdtt-health-* > /tmp/health-monitor-sha256.txt
       - name: Evidence only, no binary or release
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
