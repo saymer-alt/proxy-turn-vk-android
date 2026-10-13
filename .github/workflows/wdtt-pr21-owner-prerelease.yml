@@ -1,0 +1,138 @@
+name: WDTT PR21 Low-Memory pinned dual-arch owner prerelease
+
+on:
+  push:
+    branches: [ci/wdtt-pr21-arm64-elf-20261013]
+    paths: [.github/workflows/wdtt-pr21-owner-prerelease.yml]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wdtt-pr21-lowmem-owner-prerelease
+  cancel-in-progress: false
+
+jobs:
+  pinned-owner-lab-prerelease:
+    if: github.repository == 'saymer-alt/proxy-turn-vk-android' && github.ref == 'refs/heads/ci/wdtt-pr21-arm64-elf-20261013'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      GH_REPO: saymer-alt/proxy-turn-vk-android
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_SHA: f04bdbc101c8f9f86c2cc6a1cc512e9d2373504c
+      OWNER_TAG: wdtt-owner-lab-lowmem-f04bdbc101c8
+    steps:
+      - name: Checkout exact reviewed Draft PR 21 SHA (not current branch head)
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # pinned checkout v6
+        with:
+          repository: saymer-alt/proxy-turn-vk-android
+          ref: f04bdbc101c8f9f86c2cc6a1cc512e9d2373504c
+          path: candidate
+          persist-credentials: false
+          submodules: false
+          lfs: false
+
+      - name: Refuse overwrite and acquire checksum-verified Go SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C candidate rev-parse HEAD)" = "$SOURCE_SHA"
+          if gh release view "$OWNER_TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
+            echo 'The owner-lab tag/release already exists; refusing overwrite'
+            exit 1
+          fi
+          sudo apt-get update -qq
+          sudo apt-get install -y -q file zstd
+          curl -fL --retry 2 --connect-timeout 15 --max-time 600 \
+            https://github.com/ownik/entware-sdk/releases/download/v2026.07.04/entware-sdk-aarch64-3.10_gcc-8.4.0_glibc-2.27.Linux-x86_64.tar.zst \
+            -o sdk.tar.zst
+          echo 'd51f30c126425ebff203b107a1a0aa9d3a5844f6c481bc6ff4c117cadc208674  sdk.tar.zst' | sha256sum -c -
+          mkdir -p sdk-root
+          tar --zstd -xf sdk.tar.zst -C sdk-root --wildcards --wildcards-match-slash '*staging_dir/host/go/*'
+          go_bin="$(find "$PWD/sdk-root" -type f -path '*/host/go/bin/go' -print -quit)"
+          test -n "$go_bin"
+          test "$("$go_bin" version)" = 'go version go1.26.1 linux/amd64'
+          echo "GO_BIN=$go_bin" >> "$GITHUB_ENV"
+          echo "GOPATH=$RUNNER_TEMP/wdtt-pr21-prerelease-gopath" >> "$GITHUB_ENV"
+          echo "GOCACHE=$RUNNER_TEMP/wdtt-pr21-prerelease-cache" >> "$GITHUB_ENV"
+
+      - name: Short Go tests and pinned ARM64 + MIPSel ELF crossbuild
+        shell: bash
+        env:
+          GOENV: 'off'
+          GOTOOLCHAIN: local
+          GOWORK: 'off'
+          GOTELEMETRY: 'off'
+          CGO_ENABLED: '0'
+        run: |
+          set -euo pipefail
+          mkdir -p "$GOPATH" "$GOCACHE" "$GITHUB_WORKSPACE/dist"
+          cd candidate/go_client
+          "$GO_BIN" test -mod=readonly -short -count=1 -timeout=180s ./...
+          GOOS=linux GOARCH=arm64 "$GO_BIN" build -mod=readonly -trimpath -buildvcs=false -ldflags='-s -w -buildid=' \
+            -o "$GITHUB_WORKSPACE/dist/wt-client-linux-arm64" .
+          GOOS=linux GOARCH=mipsle GOMIPS=softfloat "$GO_BIN" build -mod=readonly -trimpath -buildvcs=false -ldflags='-s -w -buildid=' \
+            -o "$GITHUB_WORKSPACE/dist/wt-client-linux-mipsle" .
+          cd "$GITHUB_WORKSPACE/dist"
+          file wt-client-linux-arm64 wt-client-linux-mipsle
+          file wt-client-linux-arm64 | grep -Eq 'aarch64|ARM aarch64'
+          file wt-client-linux-mipsle | grep -Eq 'MIPS'
+          sha256sum wt-client-linux-arm64 wt-client-linux-mipsle > SHA256SUMS
+          sha256sum -c SHA256SUMS
+          printf '%s\n' \
+            "SOURCE_COMMIT=$SOURCE_SHA" \
+            'PARENT_DRAFT_PR=21' \
+            'GO_VERSION=1.26.1' \
+            'TARGETS=linux_arm64,linux_mipsle_softfloat' \
+            'OWNER_LAB_ONLY=true' \
+            'RELEASE_CHANNEL=prerelease' \
+            'LATEST=false' \
+            'NO_512MIB_ADMISSION=true' \
+            'NO_AUTOINSTALL=true' \
+            'NO_PRODUCTION_DEPLOYMENT=true' \
+            > BUILD-INFO.txt
+
+      - name: Publish only explicit SHA-pinned OWNER-LAB prerelease; never latest
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/ci/wdtt-pr21-arm64-elf-20261013'
+          test "$(git -C candidate rev-parse HEAD)" = "$SOURCE_SHA"
+          if gh release view "$OWNER_TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
+            echo "Refuse to replace owner-lab tag $OWNER_TAG"
+            exit 1
+          fi
+          cd dist
+          sha256sum -c SHA256SUMS
+          cat > RELEASE-NOTES.md <<'NOTES'
+          EXPERIMENTAL OWNER-LAB ONLY — WDTT Low-Memory Draft PR #21.
+          Exactly pinned client source: f04bdbc101c8f9f86c2cc6a1cc512e9d2373504c.
+
+          Contains Linux ARM64 NC-1812 lab ELF and Linux MIPSel softfloat
+          standalone research ELF. Both are NOT production installations.
+
+          WRAP and SOCKS UDP reply allocation reductions and fixed 9-worker
+          runtime RAM check are tested, but lower full-transport peak RSS is
+          NOT consistently proven. Unbounded AsyncPacketPipe risk persists
+          in PR #21 and is under separate research in Issue #22.
+          RAM floors, SOCKS limits and 30-minute owner-lab hard cutoff remain.
+          NO 512 MiB office Keenetic admission, no production KAS support.
+
+          Offline tests/build checks in this workflow do not prove end-to-end
+          VK refresh, traffic stability, real router RSS or timed exit behavior.
+          Files contain NO profiles, VK hashes, credentials or server addresses.
+
+          Download wt-client-linux-arm64 for the NC-1812 home ARM64 laboratory.
+          Verify SHA256SUMS before any OWNER-APPROVED manual test; never replace
+          a running WDTT binary and never change Mihomo/Proxy policies implicitly.
+          NOTES
+          gh release create "$OWNER_TAG" \
+            wt-client-linux-arm64 wt-client-linux-mipsle SHA256SUMS BUILD-INFO.txt \
+            --repo "$GH_REPO" \
+            --target "$SOURCE_SHA" \
+            --title "WDTT Low-Memory PR21 owner lab ARM64/MIPSel (f04bdbc)" \
+            --notes-file RELEASE-NOTES.md \
+            --prerelease --latest=false
+          gh release view "$OWNER_TAG" --repo "$GH_REPO" --json url,tagName,isPrerelease,assets \
+            --jq '{url, tagName, isPrerelease, assets: [.assets[].name]}'
