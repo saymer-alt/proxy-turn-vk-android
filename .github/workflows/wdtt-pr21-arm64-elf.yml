@@ -1,0 +1,95 @@
+name: WDTT PR21 ARM64 owner lab artifact (no release)
+
+on:
+  push:
+    branches: [ci/wdtt-pr21-arm64-elf-20261013]
+    paths:
+      - .github/workflows/wdtt-pr21-arm64-elf.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wdtt-pr21-arm64-owner-lab-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  arm64-owner-artifact:
+    if: github.repository == 'saymer-alt/proxy-turn-vk-android'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout EXACT immutable low-memory candidate (never branch tip)
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # pinned checkout v6
+        with:
+          ref: f04bdbc101c8f9f86c2cc6a1cc512e9d2373504c
+          path: candidate
+          persist-credentials: false
+          submodules: false
+          lfs: false
+
+      - name: Acquire checksum-verified pinned Entware Go SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 2 --connect-timeout 15 --max-time 600 \
+            https://github.com/ownik/entware-sdk/releases/download/v2026.07.04/entware-sdk-aarch64-3.10_gcc-8.4.0_glibc-2.27.Linux-x86_64.tar.zst \
+            -o sdk.tar.zst
+          echo 'd51f30c126425ebff203b107a1a0aa9d3a5844f6c481bc6ff4c117cadc208674  sdk.tar.zst' | sha256sum -c -
+          mkdir -p sdk-root
+          tar --zstd -xf sdk.tar.zst -C sdk-root --wildcards --wildcards-match-slash '*staging_dir/host/go/*'
+          go_bin="$(find "$PWD/sdk-root" -type f -path '*/host/go/bin/go' -print -quit)"
+          test -n "$go_bin"
+          test "$("$go_bin" version)" = 'go version go1.26.1 linux/amd64'
+          echo "GO_BIN=$go_bin" >> "$GITHUB_ENV"
+          echo "GOPATH=$RUNNER_TEMP/wdtt-pr21-gopath" >> "$GITHUB_ENV"
+          echo "GOCACHE=$RUNNER_TEMP/wdtt-pr21-gocache" >> "$GITHUB_ENV"
+
+      - name: Unit tests and reproducible Linux ARM64 ELF
+        shell: bash
+        env:
+          GOENV: 'off'
+          GOTOOLCHAIN: local
+          GOWORK: 'off'
+          GOTELEMETRY: 'off'
+          CGO_ENABLED: '0'
+        run: |
+          set -euo pipefail
+          cd candidate
+          test "$(git rev-parse HEAD)" = 'f04bdbc101c8f9f86c2cc6a1cc512e9d2373504c'
+          cd go_client
+          "$GO_BIN" test -mod=readonly -short -count=1 -timeout=180s ./...
+          mkdir -p "$RUNNER_TEMP/wdtt-owner-arm64"
+          GOOS=linux GOARCH=arm64 "$GO_BIN" build -mod=readonly -trimpath -buildvcs=false \
+            -ldflags='-s -w -buildid=' \
+            -o "$RUNNER_TEMP/wdtt-owner-arm64/wt-client-linux-arm64" .
+          file "$RUNNER_TEMP/wdtt-owner-arm64/wt-client-linux-arm64"
+          file "$RUNNER_TEMP/wdtt-owner-arm64/wt-client-linux-arm64" | grep -Eq 'ARM aarch64|aarch64'
+          cd "$RUNNER_TEMP/wdtt-owner-arm64"
+          sha256sum wt-client-linux-arm64 > SHA256SUMS
+          sha256sum -c SHA256SUMS
+          printf '%s\n' \
+            'SOURCE_COMMIT=f04bdbc101c8f9f86c2cc6a1cc512e9d2373504c' \
+            'PARENT_DRAFT_PR=21' \
+            'GO_VERSION=1.26.1' \
+            'GOOS=linux' \
+            'GOARCH=arm64' \
+            'OWNER_LAB_ONLY=true' \
+            'ARTIFACT_ONLY_NO_RELEASE=true' \
+            'NO_AUTOINSTALL=true' \
+            'NO_512MIB_ADMISSION=true' \
+            'DO_NOT_REPLACE_ACTIVE_ROUTER_BINARY=true' \
+            > BUILD-INFO.txt
+          cat BUILD-INFO.txt
+          sha256sum wt-client-linux-arm64
+
+      - name: Upload exact-source ARM64 owner-lab ELF; never a GitHub Release
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # pinned upload-artifact v4
+        with:
+          name: wdtt-pr21-arm64-f04bdbc-owner-lab
+          path: |
+            ${{ runner.temp }}/wdtt-owner-arm64/wt-client-linux-arm64
+            ${{ runner.temp }}/wdtt-owner-arm64/SHA256SUMS
+            ${{ runner.temp }}/wdtt-owner-arm64/BUILD-INFO.txt
+          if-no-files-found: error
+          retention-days: 7
