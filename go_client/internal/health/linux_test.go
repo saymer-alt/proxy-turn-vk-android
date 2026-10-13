@@ -64,8 +64,10 @@ func TestLinuxIdentityTelemetryAndOldStatus(t *testing.T) {
 	if l.Observe(time.Now()).Alive {
 		t.Fatal("foreign executable followed")
 	}
-	l.PID=2147483647
-	if l.Observe(time.Now()).Alive{t.Fatal("stale files masked a dead process")}
+	l.PID = 2147483647
+	if l.Observe(time.Now()).Alive {
+		t.Fatal("stale files masked a dead process")
+	}
 }
 
 func TestPrivateInputAndProcStat(t *testing.T) {
