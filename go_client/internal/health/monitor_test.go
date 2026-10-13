@@ -9,7 +9,7 @@ import (
 
 func TestTransitions(t *testing.T) {
 	now := time.Now()
-	o := Observation{Alive: true, Verified: true, TelemetryFresh: true}
+	o := Observation{Alive: true, Verified: true, TelemetryFresh: true, SocksOwned: true}
 	response := "FRESH_RESPONSE"
 	calls := 0
 	m := Monitor{Started: now, Now: func() time.Time { return now }, Observe: func(time.Time) Observation { return o }, Probe: func(context.Context) string { calls++; return response }}
@@ -65,6 +65,7 @@ func TestStartingStaleTelemetryAndProxyUpDeadSocks(t *testing.T) {
 	}
 	// Proxy1 up is deliberately not an input: fresh telemetry cannot mask dead SOCKS.
 	o.TelemetryFresh = true
+	o.SocksOwned = true
 	r, _ := m.Check(context.Background())
 	if r.State != "DEGRADED" || r.Reason != "SOCKS_UNAVAILABLE" {
 		t.Fatal(r)
@@ -74,7 +75,7 @@ func TestStartingStaleTelemetryAndProxyUpDeadSocks(t *testing.T) {
 func TestTerminalAndCancellation(t *testing.T) {
 	for _, terminal := range []string{"TIME_LIMIT", "STOPPED"} {
 		now := time.Now()
-		o := Observation{Alive: true, Verified: true, TelemetryFresh: true}
+		o := Observation{Alive: true, Verified: true, TelemetryFresh: true, SocksOwned: true}
 		calls := 0
 		m := Monitor{Started: now, Now: func() time.Time { return now }, Observe: func(time.Time) Observation { return o }, Probe: func(context.Context) string { calls++; return "FRESH_RESPONSE" }}
 		if terminal == "TIME_LIMIT" {
@@ -95,7 +96,9 @@ func TestTerminalAndCancellation(t *testing.T) {
 	}
 	now := time.Now()
 	ctx, cancel := context.WithCancel(context.Background())
-	m := Monitor{Started: now, Now: func() time.Time { return now }, Observe: func(time.Time) Observation { return Observation{Alive: true, Verified: true, TelemetryFresh: true} }, Probe: func(context.Context) string { cancel(); return "DATA_PATH_FAILED" }}
+	m := Monitor{Started: now, Now: func() time.Time { return now }, Observe: func(time.Time) Observation {
+		return Observation{Alive: true, Verified: true, TelemetryFresh: true, SocksOwned: true}
+	}, Probe: func(context.Context) string { cancel(); return "DATA_PATH_FAILED" }}
 	r, err := m.Check(ctx)
 	if err != context.Canceled || r.Failures != 0 || r.State != "STARTING" {
 		t.Fatal(r, err)
@@ -105,7 +108,7 @@ func TestTerminalAndCancellation(t *testing.T) {
 func TestPostProbeRevalidationAndLimit(t *testing.T) {
 	for _, limit := range []bool{false, true} {
 		now := time.Now()
-		o := Observation{Alive: true, Verified: true, TelemetryFresh: true}
+		o := Observation{Alive: true, Verified: true, TelemetryFresh: true, SocksOwned: true}
 		m := Monitor{Started: now, Now: func() time.Time { return now }, Observe: func(time.Time) Observation { return o }, Probe: func(context.Context) string {
 			if limit {
 				now = now.Add(LabLimit)
@@ -129,7 +132,9 @@ func TestRunCancellationDoesNotOverlapOrInventStopped(t *testing.T) {
 	now := time.Now()
 	ctx, cancel := context.WithCancel(context.Background())
 	calls := 0
-	m := Monitor{Started: now, Now: func() time.Time { return now }, Observe: func(time.Time) Observation { return Observation{Alive: true, Verified: true, TelemetryFresh: true} }, Probe: func(context.Context) string { calls++; return "FRESH_RESPONSE" }}
+	m := Monitor{Started: now, Now: func() time.Time { return now }, Observe: func(time.Time) Observation {
+		return Observation{Alive: true, Verified: true, TelemetryFresh: true, SocksOwned: true}
+	}, Probe: func(context.Context) string { calls++; return "FRESH_RESPONSE" }}
 	err := m.Run(ctx, time.Hour, func(r Result) error {
 		if r.State != "READY" {
 			t.Fatal(r)

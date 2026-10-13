@@ -10,7 +10,7 @@ import (
 const LabLimit = 30 * time.Minute
 
 type Observation struct {
-	Alive, Verified, TelemetryFresh, TimeLimit bool
+	Alive, Verified, TelemetryFresh, TimeLimit, SocksOwned bool
 }
 
 type Result struct {
@@ -63,10 +63,14 @@ func (m *Monitor) Check(ctx context.Context) (Result, error) {
 	if o.Verified {
 		reason = "TELEMETRY_STALE_OR_INVALID"
 		if o.TelemetryFresh {
-			// Cannot run a probe past the original WDTT session limit.
-			probeCtx, cancel := context.WithDeadline(ctx, m.Started.Add(LabLimit))
-			reason = m.Probe(probeCtx)
-			cancel()
+			if !o.SocksOwned {
+				reason = "SOCKS_UNAVAILABLE_OR_FOREIGN"
+			} else {
+				// Cannot run a probe past the original WDTT session limit.
+				probeCtx, cancel := context.WithDeadline(ctx, m.Started.Add(LabLimit))
+				reason = m.Probe(probeCtx)
+				cancel()
+			}
 		}
 	}
 	// Owner cancellation is not a failed check or a fabricated STOPPED worker.
@@ -82,6 +86,8 @@ func (m *Monitor) Check(ctx context.Context) (Result, error) {
 		reason = "PROCESS_UNVERIFIED"
 	} else if !o.TelemetryFresh {
 		reason = "TELEMETRY_STALE_OR_INVALID"
+	} else if !o.SocksOwned {
+		reason = "SOCKS_UNAVAILABLE_OR_FOREIGN"
 	}
 	m.result.CheckedAt, m.result.Reason = now.Unix(), reason
 	if reason == "FRESH_RESPONSE" {

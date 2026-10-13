@@ -2,6 +2,7 @@
 package health
 
 import (
+	"bufio"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -186,6 +187,7 @@ func (l *Linux) Observe(now time.Time) Observation {
 		return o
 	}
 	o.Verified = true
+	o.SocksOwned = ownsSocks(pidPath)
 	b, modified, err := ReadPrivate(filepath.Join(l.Profile, "status"))
 	if err == nil && !modified.Before(l.Started) && !modified.After(now) && string(b) == "TIME_LIMIT\n" {
 		o.TimeLimit = true
@@ -202,4 +204,36 @@ func (l *Linux) Observe(now time.Time) Observation {
 		o.TelemetryFresh = delta >= -2*time.Second && delta <= 27*time.Second
 	}
 	return o
+}
+
+// A foreign loopback listener must not make this WDTT instance look healthy.
+func ownsSocks(pidPath string) bool {
+	f, err := os.Open(pidPath + "/net/tcp")
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	scan := bufio.NewScanner(io.LimitReader(f, 1<<20))
+	inode := ""
+	for scan.Scan() {
+		fields := strings.Fields(scan.Text())
+		if len(fields) > 9 && fields[1] == "0100007F:0439" && fields[3] == "0A" {
+			inode = fields[9]
+			break
+		}
+	}
+	if inode == "" || inode == "0" {
+		return false
+	}
+	fds, err := os.ReadDir(pidPath + "/fd")
+	if err != nil {
+		return false
+	}
+	for _, fd := range fds {
+		target, err := os.Readlink(pidPath + "/fd/" + fd.Name())
+		if err == nil && target == "socket:["+inode+"]" {
+			return true
+		}
+	}
+	return false
 }
