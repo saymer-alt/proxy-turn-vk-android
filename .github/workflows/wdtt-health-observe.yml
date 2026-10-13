@@ -1,0 +1,46 @@
+name: WDTT observation-only health monitor
+on:
+  pull_request:
+    paths: ['go_client/internal/health/**', 'go_client/cmd/wdtt-health/**', '.github/workflows/wdtt-health-observe.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  health:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          fetch-depth: 0
+      - name: Existing pinned Go SDK
+        run: |
+          sudo apt-get update && sudo apt-get install -y zstd gcc
+          curl -fL --retry 2 https://github.com/ownik/entware-sdk/releases/download/v2026.07.04/entware-sdk-aarch64-3.10_gcc-8.4.0_glibc-2.27.Linux-x86_64.tar.zst -o sdk.tar.zst
+          echo 'd51f30c126425ebff203b107a1a0aa9d3a5844f6c481bc6ff4c117cadc208674  sdk.tar.zst' | sha256sum -c -
+          mkdir sdk-root
+          tar --zstd -xf sdk.tar.zst -C sdk-root --wildcards --wildcards-match-slash '*staging_dir/host/go/*'
+          echo "$(find "$PWD/sdk-root" -type f -path '*/host/go/bin/go' -printf '%h\n' -quit)" >> "$GITHUB_PATH"
+      - name: Unit, race and unchanged transport tests
+        working-directory: go_client
+        env:
+          GOTOOLCHAIN: local
+          GOENV: 'off'
+          GOWORK: 'off'
+        run: |
+          set -euo pipefail
+          go test -mod=readonly -short -count=1 -timeout=120s ./...
+          CGO_ENABLED=1 CC=/usr/bin/gcc go test -mod=readonly -race -count=1 -timeout=60s ./internal/health ./cmd/wdtt-health
+          for arch in amd64 arm64 mipsle; do
+            CGO_ENABLED=0 GOOS=linux GOARCH="$arch" GOMIPS=softfloat go build -mod=readonly -trimpath -buildvcs=false -o "/tmp/wdtt-health-$arch" ./cmd/wdtt-health
+          done
+          /tmp/wdtt-health-amd64 -h
+          # Parent is PR #15; new monitor must not change any existing client source.
+          git -C .. diff --exit-code dc78576bcc7593ad52b30334bd46670571753be1 HEAD -- go_client ':(exclude)go_client/internal/health/**' ':(exclude)go_client/cmd/wdtt-health/**'
+          sha256sum /tmp/wdtt-health-* > /tmp/health-monitor-sha256.txt
+      - name: Evidence only, no binary or release
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: health-monitor-build-evidence
+          path: /tmp/health-monitor-sha256.txt
+          if-no-files-found: error
