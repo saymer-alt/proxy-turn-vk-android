@@ -65,6 +65,7 @@ func WorkerGroup(
 
 	credStreamID := groupID * 100
 	user, pass, turnURLs, err := GetCreds(ctx, hash, credStreamID)
+	wdttLabWorkerMeter.initialCredentials(groupID, err == nil)
 	var creds *Credentials
 	if err == nil {
 		creds = &Credentials{User: user, Pass: pass, TurnURLs: turnURLs, CacheStreamID: credStreamID}
@@ -97,6 +98,7 @@ func WorkerGroup(
 			invalidateInjectedTurnCreds(hash)
 		}
 		u, p, urls, refreshErr := GetCreds(ctx, hash, credStreamID)
+		wdttLabWorkerMeter.refreshedCredentials(groupID, refreshErr == nil)
 		if refreshErr != nil {
 			log.Printf("[TURN] Не удалось обновить креды после %s: %v", reason, refreshErr)
 			return false
@@ -181,6 +183,9 @@ func WorkerGroup(
 						strings.Contains(errStrLower, "attribute not found")
 					isTurnQuota := strings.Contains(errStrLower, "quota") || strings.Contains(errStr, "486")
 					quotaRetry = isTurnQuota
+					if isTurnQuota {
+						wdttLabWorkerMeter.turnQuota(groupID)
+					}
 					turnCredRefreshNeeded := !isTurnQuota && (turnAllocAttrMissing ||
 						strings.Contains(errStrLower, "turn allocate auth") ||
 						strings.Contains(errStrLower, "invalid credential") ||

@@ -93,6 +93,7 @@ func wdttTelemetrySnapshot() []byte {
         "go_gc_count":m.NumGC,
     }
     wdttLifeAddSnapshot(info)
+    wdttLabWorkerMeter.snapshot(info)
     data,err:=json.MarshalIndent(info,"","  ")
     if err!=nil {return nil}
     return append(data,'\n')
