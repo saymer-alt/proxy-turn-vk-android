@@ -18,9 +18,11 @@ func TestOwnerQwdttAnonymousExactWorkerBudgets(t *testing.T) {
    hashes string
    minKiB int64
    wantGroups []int
+   wantHashOrder []string
  }{
-   {"single16",16,"oneHash",147456,[]int{9,7}},
-   {"dual18",18,"oneHash,twoHash",155648,[]int{9,9}},
+   {"single16",16,"oneHash",147456,[]int{9,7},[]string{"oneHash","oneHash"}},
+   {"single18",18,"oneHash",155648,[]int{9,9},[]string{"oneHash","oneHash"}},
+   {"dual18",18,"oneHash,twoHash",155648,[]int{9,9},[]string{"oneHash","twoHash"}},
  }{
    t.Run(tc.label,func(t *testing.T){
      opts:=qAnonOpts()
@@ -43,7 +45,7 @@ func TestOwnerQwdttAnonymousExactWorkerBudgets(t *testing.T) {
        if end-start!=tc.wantGroups[group] {t.Fatal("wrong worker IDs/group")}
        hashes:=ParseHashes(c.VK)
        usedHash:=hashes[group%len(hashes)]
-       if tc.workers==18 && usedHash!=hashes[group] {t.Fatal("multiple hashes not distributed")}
+       if usedHash!=tc.wantHashOrder[group] {t.Fatal("incorrect anonymous hash selected for group")}
      }
      if _,_,err:=qParse([]byte(qURI(fmtInt(tc.workers),tc.hashes)),opts,tc.minKiB-1);
          err==nil || !strings.Contains(err.Error(),"MEMORY_INSUFFICIENT") {
@@ -54,13 +56,13 @@ func TestOwnerQwdttAnonymousExactWorkerBudgets(t *testing.T) {
      if _,_,err:=qParse([]byte(qURI(fmtInt(tc.workers),tc.hashes)),bad,200000);err==nil{
        t.Fatal("without explicit max-workers consent")
      }
-     if len(ParseHashes(tc.hashes))==1{
+     if tc.workers==16 {
        if _,_,err:=qParse([]byte(qURI(fmtInt(tc.workers),tc.hashes+",another")),opts,200000);err==nil {
          t.Fatal("16 with two hashes unexpectedly allowed")
        }
-     }else{
-       if _,_,err:=qParse([]byte(qURI(fmtInt(tc.workers),"oneHash")),opts,200000);err==nil{
-         t.Fatal("18 with one hash unexpectedly allowed")
+     }else if tc.workers==18 {
+       if _,_,err:=qParse([]byte(qURI(fmtInt(tc.workers),"oneHash,twoHash,thirdHash")),opts,200000);err==nil{
+         t.Fatal("18 with three hashes unexpectedly allowed")
        }
      }
      broken:=c
@@ -86,7 +88,7 @@ func TestOwnerQwdttAnonymousExactWorkerBudgets(t *testing.T) {
 
 func TestOwnerQwdtt16And18PrivateOfflineImport(t *testing.T) {
  for _,tc:=range []struct{workers int;hashes string}{
-   {16,"oneHash"}, {18,"oneHash,twoHash"},
+   {16,"oneHash"}, {18,"oneHash"}, {18,"oneHash,twoHash"},
  }{
    t.Run(fmtInt(tc.workers),func(t *testing.T){
      d:=t.TempDir()

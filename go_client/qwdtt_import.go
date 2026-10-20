@@ -221,7 +221,7 @@ func qParse(raw []byte, o qOptions, availableKiB int64) (labConfig, string, erro
 	}
 	// Only explicitly supported anonymous field profiles are admitted.
 	// 9/one-hash maps to the field-proven old 12 -> effective9 path.
-	// 16/one-hash and 18/two-hashes require exact runtime group budgets
+	// 16/one-hash and 18/one-or-two-hashes require exact runtime group budgets
 	// of 9+7 and 9+9, respectively. A separate owner-only runtime flag
 	// bypasses truncation ONLY for these validated qWDTT configurations.
 	// Each variant requires exact operator max-workers consent and its
@@ -244,8 +244,8 @@ func qParse(raw []byte, o qOptions, availableKiB int64) (labConfig, string, erro
 			runtimeWorkers = 12 // legacy pinned runtime: 12 requested -> 9 effective.
 		case workers == 16 && len(hashes) == 1:
 			runtimeWorkers = 16 // exact 9+7 only in trusted lab variant.
-		case workers == 18 && len(hashes) == 2:
-			runtimeWorkers = 18 // exact 9+9, hashes alternate by group index.
+		case workers == 18 && (len(hashes) == 1 || len(hashes) == 2):
+			runtimeWorkers = 18 // exact 9+9; one hash is reused by two groups, two hashes are distributed.
 		default:
 			return reject("ANONYMOUS_WORKER_POLICY_UNRESOLVED")
 		}

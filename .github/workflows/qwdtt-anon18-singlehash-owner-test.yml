@@ -1,0 +1,103 @@
+name: qWDTT anonymous 18 single-hash candidate (owner-only)
+on:
+  pull_request:
+    branches:
+      - feature/wdtt-bounded-pipe-owner-20261013
+    paths:
+      - 'go_client/qwdtt_import.go'
+      - 'go_client/lab_security.go'
+      - 'go_client/qwdtt_anonymous16_18_test.go'
+      - 'provenance/QWDTT-PROFILE-COMPAT-2026-10-21.md'
+      - '.github/workflows/qwdtt-anon18-singlehash-owner-test.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: qwdtt-singlehash-candidate
+  cancel-in-progress: false
+jobs:
+  test-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact candidate and full history
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Enforce reviewed narrow diff relative to immutable PR23
+        run: |
+          set -euo pipefail
+          base=239df99dfb28adfc7a9ce03497a4b97d051b3ffd
+          git cat-file -e "$base^{commit}"
+          git diff --name-only "$base" HEAD > "$RUNNER_TEMP/singlehash-changed-files"
+          cat "$RUNNER_TEMP/singlehash-changed-files"
+          test "$(wc -l < "$RUNNER_TEMP/singlehash-changed-files")" -eq 5
+          if grep -Ev '^(go_client/qwdtt_import.go|go_client/lab_security.go|go_client/qwdtt_anonymous16_18_test.go|provenance/QWDTT-PROFILE-COMPAT-2026-10-21.md|\.github/workflows/qwdtt-anon18-singlehash-owner-test\.yml)$' "$RUNNER_TEMP/singlehash-changed-files"; then
+            echo "UNREVIEWED_SOURCE_CHANGE" >&2
+            exit 1
+          fi
+          grep -Fq 'time.Sleep(30 * time.Minute); labStatus("TIME_LIMIT"); os.Exit(75)' go_client/lab_security.go
+          grep -Fq 'hashCount == 1 || hashCount == 2' go_client/lab_security.go
+          grep -Fq 'case workers == 18 && (len(hashes) == 1 || len(hashes) == 2):' go_client/qwdtt_import.go
+          git diff --exit-code "$base" -- go_client/session.go go_client/group.go go_client/socks_service.go go_client/lowmem_admission.go
+      - name: Pinned Go SDK and QEMU, no publish/upload
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y qemu-user zstd gcc
+          curl -fL --retry 2 --connect-timeout 20 --max-time 240 \
+            https://github.com/ownik/entware-sdk/releases/download/v2026.07.04/entware-sdk-aarch64-3.10_gcc-8.4.0_glibc-2.27.Linux-x86_64.tar.zst \
+            -o sdk.tar.zst
+          echo 'd51f30c126425ebff203b107a1a0aa9d3a5844f6c481bc6ff4c117cadc208674  sdk.tar.zst' | sha256sum -c -
+          mkdir sdk-root
+          tar --zstd -xf sdk.tar.zst -C sdk-root --wildcards --wildcards-match-slash '*staging_dir/host/go/*'
+          go_bin="$(find "$PWD/sdk-root" -type f -path '*/host/go/bin/go' -print -quit)"
+          test -n "$go_bin"
+          echo "GO_BIN=$go_bin" >> "$GITHUB_ENV"
+          echo "GOPATH=$RUNNER_TEMP/singlehash-gopath" >> "$GITHUB_ENV"
+          echo "GOCACHE=$RUNNER_TEMP/singlehash-gocache" >> "$GITHUB_ENV"
+      - name: All short Go unit tests, including synthetic private import
+        env:
+          GOENV: 'off'
+          GOTOOLCHAIN: local
+          GOWORK: 'off'
+          GOTELEMETRY: 'off'
+          GOMAXPROCS: '2'
+        run: |
+          set -euo pipefail
+          cd go_client
+          CGO_ENABLED=0 "$GO_BIN" test -mod=readonly -short -count=1 -timeout=300s ./...
+      - name: Native Go race short suite
+        env:
+          GOENV: 'off'
+          GOTOOLCHAIN: local
+          GOWORK: 'off'
+          GOTELEMETRY: 'off'
+          GOMAXPROCS: '2'
+        run: |
+          set -euo pipefail
+          cd go_client
+          CGO_ENABLED=1 CC=/usr/bin/gcc "$GO_BIN" test -mod=readonly -race -short -count=1 -timeout=300s ./...
+      - name: ARM64 and MIPSel synthetic anonymous 18/1 and 18/2 tests
+        env:
+          GOENV: 'off'
+          GOTOOLCHAIN: local
+          GOWORK: 'off'
+          GOTELEMETRY: 'off'
+          GOOS: linux
+          CGO_ENABLED: '0'
+          GOMIPS: softfloat
+          GOMAXPROCS: '2'
+        run: |
+          set -euo pipefail
+          cd go_client
+          GOARCH=arm64 "$GO_BIN" test -mod=readonly -trimpath -buildvcs=false -c -o "$RUNNER_TEMP/singlehash-arm64.test"
+          GOARCH=mipsle "$GO_BIN" test -mod=readonly -trimpath -buildvcs=false -c -o "$RUNNER_TEMP/singlehash-mipsle.test"
+          qemu-aarch64 "$RUNNER_TEMP/singlehash-arm64.test" -test.run '^TestOwnerQwdtt(AnonymousExactWorkerBudgets|16And18PrivateOfflineImport)$' -test.timeout=120s
+          qemu-mipsel "$RUNNER_TEMP/singlehash-mipsle.test" -test.run '^TestOwnerQwdtt(AnonymousExactWorkerBudgets|16And18PrivateOfflineImport)$' -test.timeout=120s
+          file "$RUNNER_TEMP"/singlehash-*.test
+          sha256sum "$RUNNER_TEMP"/singlehash-*.test
+      - name: No public ELF, IPK or profile artifact
+        run: |
+          echo 'Synthetic-only CI: no artifact upload, package, release, public credentials or router interaction.'

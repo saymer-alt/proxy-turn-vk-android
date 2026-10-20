@@ -276,8 +276,8 @@ func labValidate(c labConfig) error {
 			// qWDTT single hash nine-worker translation.
 		case c.Workers == 16 && c.QWDTTRequestedWorkers == 16 && c.QWDTTEffectiveWorkers == 16 && hashCount == 1:
 			// Exact one-hash 9+7.
-		case c.Workers == 18 && c.QWDTTRequestedWorkers == 18 && c.QWDTTEffectiveWorkers == 18 && hashCount == 2:
-			// Exact two-hash 9+9.
+		case c.Workers == 18 && c.QWDTTRequestedWorkers == 18 && c.QWDTTEffectiveWorkers == 18 && (hashCount == 1 || hashCount == 2):
+			// Exact 9+9; one hash is reused by two groups, two hashes are distributed.
 		default:
 			return labErr
 		}
