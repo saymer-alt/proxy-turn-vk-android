@@ -309,6 +309,13 @@ func qMemory() int64 {
 	return free
 }
 func qImport(o qOptions) error {
+	return qImportWithParser(o, qParse)
+}
+
+// Reuse hardened private-file I/O, account-credential validation, local UDP
+// port admission and atomic no-clobber write for all explicit link dialects.
+// Importers must parse strict syntax, never log the input or credential values.
+func qImportWithParser(o qOptions, parse func([]byte, qOptions, int64) (labConfig, string, error)) error {
 	if o.Input == "" || o.Output == "" {
 		return qError("PRIVATE_INPUT_AND_OUTPUT_REQUIRED")
 	}
@@ -316,7 +323,7 @@ func qImport(o qOptions) error {
 	if e != nil {
 		return e
 	}
-	c, name, e := qParse(raw, o, qMemory())
+	c, name, e := parse(raw, o, qMemory())
 	if e != nil {
 		return e
 	}
