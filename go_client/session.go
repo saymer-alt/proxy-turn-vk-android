@@ -362,6 +362,8 @@ func RunSession(
 	}
 	d.Register(slot)
 	labWorkerRegistered()
+	wdttLabWorkerMeter.registered(sessionID)
+	defer wdttLabWorkerMeter.unregistered(sessionID)
 	defer d.Unregister(slot)
 
 	// Proxy DTLS ↔ Dispatcher
