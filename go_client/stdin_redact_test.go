@@ -125,9 +125,9 @@ func TestStdinLogLineFiltersErrorMarker(t *testing.T) {
 // приватный link, ни его префикс — только безопасную сводку (длину).
 func TestShortLinkWithholdsContent(t *testing.T) {
 	for name, link := range map[string]string{
-		"short": "c1",             // <= 8 байт: раньше возвращался целиком
-		"edge":  "CANARYabc",      // ровно 9 байт: раньше срезались первые 8
-		"long":  canaryLink,       // длинная фиктивная приватная ссылка
+		"short": "c1",        // <= 8 байт: раньше возвращался целиком
+		"edge":  "CANARYabc", // ровно 9 байт: раньше срезались первые 8
+		"long":  canaryLink,  // длинная фиктивная приватная ссылка
 	} {
 		got := shortLink(link)
 		if strings.Contains(got, link) {
