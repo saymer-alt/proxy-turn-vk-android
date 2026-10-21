@@ -1,0 +1,93 @@
+name: WDTT NC4210 direct HTTPS owner prerelease (not latest)
+on:
+  push:
+    branches: [ops/wdtt-field-direct-download-20261021]
+    paths: ['.github/workflows/wdtt-nc4210-direct-download.yml']
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: wdtt-nc4210-owner-download-once-20261021
+  cancel-in-progress: false
+jobs:
+  publish-source-pinned-test-only:
+    if: github.repository == 'saymer-alt/proxy-turn-vk-android' && github.ref == 'refs/heads/ops/wdtt-field-direct-download-20261021'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: saymer-alt/proxy-turn-vk-android
+      PINNED_SOURCE: b62bd1a7987713e8eb5ca468ef764d1c0ecac474
+      PINNED_ARM64_SHA256: afcaa09a889260d6c3bf661396640f1e3d2ba677a2743b98eed71f9aaafe8182
+      OWNER_TAG: wdtt-owner-nc4210-pr34-20261021-b62bd1a79877
+    steps:
+      - name: Checkout EXACT reviewed ops branch
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Guard original source and operations-only delta
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git merge-base --is-ancestor "$PINNED_SOURCE" HEAD
+          git diff --name-only "$PINNED_SOURCE" HEAD > changed.txt
+          cat changed.txt
+          test "$(wc -l < changed.txt)" -eq 2
+          if grep -Ev '^(owner-lab/NC4210-test-120.sh|\.github/workflows/wdtt-nc4210-direct-download.yml)$' changed.txt; then
+            echo 'SOURCE_CHANGED_ABORT' >&2
+            exit 1
+          fi
+          git diff --quiet "$PINNED_SOURCE" -- go_client tools/check_entware_candidate.py hardened-relay server.go
+          sh -n owner-lab/NC4210-test-120.sh
+          grep -Fq 'sha256sum -c SHA256SUMS' owner-lab/NC4210-test-120.sh
+          grep -Fq '127.0.0.1:1081' owner-lab/NC4210-test-120.sh
+          grep -Fq 'sleep 120' owner-lab/NC4210-test-120.sh
+      - name: Download previously PASSED exact source-built GitHub Actions artifact
+        run: |
+          set -euo pipefail
+          mkdir -p owner-assets
+          gh run download 39590836064 --repo "$GH_REPO" --name wdtt-owner-combined-field-candidate --dir owner-assets
+          test -s owner-assets/wt-client-linux-arm64
+          test -s owner-assets/SHA256SUMS
+          grep -Fx "$PINNED_ARM64_SHA256  wt-client-linux-arm64" owner-assets/SHA256SUMS
+          (
+            cd owner-assets
+            sha256sum -c SHA256SUMS
+          )
+          grep -Fx "SOURCE_COMMIT=$PINNED_SOURCE" owner-assets/BUILD-INFO.txt
+          file owner-assets/wt-client-linux-arm64 | grep -Eq 'aarch64|ARM64'
+          cp owner-lab/NC4210-test-120.sh owner-assets/test-120.sh
+          chmod 700 owner-assets/wt-client-linux-arm64 owner-assets/test-120.sh
+          sha256sum owner-assets/wt-client-linux-arm64
+      - name: Publish isolated prerelease WITHOUT changing stable/latest
+        run: |
+          set -euo pipefail
+          if gh release view "$OWNER_TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
+            echo "EXISTING_TAG_REFUSED_TO_OVERWRITE" >&2
+            exit 1
+          fi
+          cat > owner-assets/README.txt <<'NOTES'
+          Owner-only experimental NC4210 ARM64 WDTT field client.
+          Source commit: b62bd1a7987713e8eb5ca468ef764d1c0ecac474
+          CI: https://github.com/saymer-alt/proxy-turn-vk-android/actions/runs/39590836064
+          Full-chain: https://github.com/saymer-alt/proxy-turn-vk-android/actions/runs/39600353547
+          Download via curl; chmod 700 and verify SHA256 before running.
+          Test only in /opt/wdtt-field-candidate with copied private config.json (0600).
+          Existing PR23 binary remains untouched.
+          Private keys, credentials, profiles, VK hashes NOT included.
+          No daemon/IPK/KAS changes, no restart, no production routing.
+          Real live 18/1 18/2 field behavior not verified for this new binary.
+          NOTES
+          gh release create "$OWNER_TAG" \
+            owner-assets/wt-client-linux-arm64 \
+            owner-assets/SHA256SUMS \
+            owner-assets/test-120.sh \
+            owner-assets/README.txt \
+            --repo "$GH_REPO" \
+            --target "$PINNED_SOURCE" \
+            --title "WDTT Owner NC4210 PR34 ARM64, test-only" \
+            --notes "Source-pinned experimental test client. Not for production use. SHA256 verified. No keys or profiles." \
+            --prerelease --latest=false
+          gh release view "$OWNER_TAG" --repo "$GH_REPO" --json url,isPrerelease,isLatest,tagName,assets
