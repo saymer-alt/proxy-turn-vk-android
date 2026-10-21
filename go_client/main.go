@@ -56,6 +56,16 @@ func drainCaptchaResult() {
 	}
 }
 
+// stdinLogLine решает, что из STDIN-строки попадёт в журнал: шумовые
+// строки (error:tunnel stopped) отбрасываются до классификатора, всё
+// остальное проходит через redactStdinForLog.
+func stdinLogLine(line string) (string, bool) {
+	if strings.Contains(line, "error:tunnel stopped") {
+		return "", false
+	}
+	return redactStdinForLog(line)
+}
+
 // redactStdinForLog возвращает безопасное для журнала представление
 // STDIN-строки. Команды управления логируются по имени; чувствительные
 // команды (TURN_CREDS, CAPTCHA_RESULT) — только по имени без содержимого;
@@ -158,10 +168,8 @@ func main() {
 		scanner := bufio.NewScanner(os.Stdin)
 		for scanner.Scan() {
 			line := strings.TrimSpace(scanner.Text())
-			if !strings.Contains(line, "error:tunnel stopped") {
-				if safe, ok := redactStdinForLog(line); ok {
-					log.Printf("[STDIN] %s", safe)
-				}
+			if safe, ok := stdinLogLine(line); ok {
+				log.Printf("[STDIN] %s", safe)
 			}
 			switch {
 			case line == "PAUSE":
