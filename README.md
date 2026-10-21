@@ -9,11 +9,11 @@
 | Задача | Куда перейти |
 |---|---|
 | Android: профили, QR, VK-авторизация, подписки | [Руководство Android-клиента](docs/ANDROID-CLIENT-LEGACY.md) — сохранённая исходная документация qWDTT |
-| Экспериментальный SOCKS5-клиент Keenetic ARM64/MIPSel | [Единый кандидат PR #34](https://github.com/saymer-alt/proxy-turn-vk-android/pull/34), [сборка и CI](https://github.com/saymer-alt/proxy-turn-vk-android/actions/runs/39590836064) |
-| Полная проверка Entware/KAS и локальная связка | [Независимый CI PR #36](https://github.com/saymer-alt/proxy-turn-vk-android/pull/36), [успешный прогон](https://github.com/saymer-alt/proxy-turn-vk-android/actions/runs/39600353547) |
-| ARM64-клиент для изолированного теста NC-4210 | [Экспериментальный prerelease PR #34](https://github.com/saymer-alt/proxy-turn-vk-android/releases/tag/wdtt-owner-nc4210-pr34-20261021-b62bd1a79877) |
-| Реальные ключи 18/1 и другие схемы | [Issue #29 — совместимость](https://github.com/saymer-alt/proxy-turn-vk-android/issues/29) |
-| Оптимизация потребления RAM | [Issue #35 — замеры и план](https://github.com/saymer-alt/proxy-turn-vk-android/issues/35) |
+| Экспериментальный SOCKS5-клиент Keenetic ARM64/MIPSel | [Единый кандидат PR #34](https://github.com/saymer-alt/wdtt-suite/pull/34), [сборка и CI](https://github.com/saymer-alt/wdtt-suite/actions/runs/39590836064) |
+| Полная проверка Entware/KAS и локальная связка | [Независимый CI PR #36](https://github.com/saymer-alt/wdtt-suite/pull/36), [успешный прогон](https://github.com/saymer-alt/wdtt-suite/actions/runs/39600353547) |
+| ARM64-клиент для изолированного теста NC-4210 | [Экспериментальный prerelease PR #34](https://github.com/saymer-alt/wdtt-suite/releases/tag/wdtt-owner-nc4210-pr34-20261021-b62bd1a79877) |
+| Реальные ключи 18/1 и другие схемы | [Issue #29 — совместимость](https://github.com/saymer-alt/wdtt-suite/issues/29) |
+| Оптимизация потребления RAM | [Issue #35 — замеры и план](https://github.com/saymer-alt/wdtt-suite/issues/35) |
 
 ## Принцип работы
 
@@ -48,7 +48,7 @@ WireGuard или локальный SOCKS5
 
 Бинарник доступен только как **экспериментальный prerelease**. Он не входит в обычные Android-релизы и не заменяет штатную прошивку/KAS/Entware.
 
-- [Загрузка PR #34, ARM64, SHA256 и тестовый скрипт](https://github.com/saymer-alt/proxy-turn-vk-android/releases/tag/wdtt-owner-nc4210-pr34-20261021-b62bd1a79877)
+- [Загрузка PR #34, ARM64, SHA256 и тестовый скрипт](https://github.com/saymer-alt/wdtt-suite/releases/tag/wdtt-owner-nc4210-pr34-20261021-b62bd1a79877)
 - **SHA256 `wt-client-linux-arm64`:** `afcaa09a889260d6c3bf661396640f1e3d2ba677a2743b98eed71f9aaafe8182`
 - **Исходный код:** commit `b62bd1a7987713e8eb5ca468ef764d1c0ecac474`
 
@@ -60,7 +60,7 @@ mkdir -p /opt/wdtt-field-candidate
 chmod 700 /opt/wdtt-field-candidate
 cd /opt/wdtt-field-candidate || exit 1
 
-BASE="https://github.com/saymer-alt/proxy-turn-vk-android/releases/download/wdtt-owner-nc4210-pr34-20261021-b62bd1a79877"
+BASE="https://github.com/saymer-alt/wdtt-suite/releases/download/wdtt-owner-nc4210-pr34-20261021-b62bd1a79877"
 curl -fL --retry 2 -o wt-client-linux-arm64 "$BASE/wt-client-linux-arm64" &&
 curl -fL --retry 2 -o SHA256SUMS "$BASE/SHA256SUMS" &&
 curl -fL --retry 2 -o test-120.sh "$BASE/test-120.sh" &&
@@ -91,4 +91,4 @@ scripts/          Android-сборка
 
 **Лицензия:** [GPL-3.0](LICENSE). Оговорки и лицензии сторонних компонентов должны сохраняться при распространении сборок.
 
-> **Новое название утверждено владельцем 21.10.2026: WDTT Suite**, будущий адрес `saymer-alt/wdtt-suite`. Пока фактический адрес остаётся `saymer-alt/proxy-turn-vk-android`: до технического переименования надо проверить CI, относительные/прямые ссылки и команды скачивания бинарников. Старые ссылки на опубликованный PR34 prerelease сохраняем как историческую точку входа.
+> **Новое название утверждено владельцем 21.10.2026: WDTT Suite**, фактический адрес репозитория — `saymer-alt/wdtt-suite`. Техническое переименование GitHub выполнено 21.10.2026 (Issue #38): Issues, PR, Releases, теги и история сохранены, старый адрес `saymer-alt/proxy-turn-vk-android` продолжает работать через автоматический redirect GitHub, включая скачивание релизных файлов. Старые ссылки на опубликованный PR34 prerelease сохранены как историческая точка входа.
