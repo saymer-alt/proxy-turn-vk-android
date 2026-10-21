@@ -65,8 +65,16 @@ jobs:
         run: |
           set -euo pipefail
           if gh release view "$OWNER_TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
-            echo "EXISTING_TAG_REFUSED_TO_OVERWRITE" >&2
-            exit 1
+            echo 'Existing experimental tag: verify source, binary and script without replacing either'
+            test "$(gh release view "$OWNER_TAG" --repo "$GH_REPO" --json isPrerelease --jq .isPrerelease)" = true
+            test "$(gh release view "$OWNER_TAG" --repo "$GH_REPO" --json targetCommitish --jq .targetCommitish)" = "$PINNED_SOURCE"
+            mkdir -p "$RUNNER_TEMP/published-verify"
+            gh release download "$OWNER_TAG" --repo "$GH_REPO" --pattern wt-client-linux-arm64 --dir "$RUNNER_TEMP/published-verify"
+            printf '%s  %s\n' "$PINNED_ARM64_SHA256" "$RUNNER_TEMP/published-verify/wt-client-linux-arm64" | sha256sum -c -
+            gh release download "$OWNER_TAG" --repo "$GH_REPO" --pattern test-120.sh --dir "$RUNNER_TEMP/published-verify"
+            cmp owner-lab/NC4210-test-120.sh "$RUNNER_TEMP/published-verify/test-120.sh"
+          else
+            echo 'New test-only tag'
           fi
           cat > owner-assets/README.txt <<'NOTES'
           Owner-only experimental NC4210 ARM64 WDTT field client.
@@ -80,8 +88,16 @@ jobs:
           No daemon/IPK/KAS changes, no restart, no production routing.
           Real live 18/1 18/2 field behavior not verified for this new binary.
           NOTES
-          gh release create "$OWNER_TAG" \
-            owner-assets/wt-client-linux-arm64 \
+          # This prerelease distributes only ARM64, not the MIPSel ELF.
+          printf '%s  wt-client-linux-arm64\n' "$PINNED_ARM64_SHA256" > owner-assets/SHA256SUMS
+          (cd owner-assets && sha256sum -c SHA256SUMS)
+          if gh release view "$OWNER_TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
+            # Repair the initial dual-architecture manifest asset only.
+            # Source-hashed verified binary and script are kept unchanged.
+            gh release upload "$OWNER_TAG" owner-assets/SHA256SUMS --repo "$GH_REPO" --clobber
+          else
+            gh release create "$OWNER_TAG" \
+              owner-assets/wt-client-linux-arm64 \
             owner-assets/SHA256SUMS \
             owner-assets/test-120.sh \
             owner-assets/README.txt \
@@ -89,5 +105,6 @@ jobs:
             --target "$PINNED_SOURCE" \
             --title "WDTT Owner NC4210 PR34 ARM64, test-only" \
             --notes "Source-pinned experimental test client. Not for production use. SHA256 verified. No keys or profiles." \
-            --prerelease --latest=false
-          gh release view "$OWNER_TAG" --repo "$GH_REPO" --json url,isPrerelease,isLatest,tagName,assets
+              --prerelease --latest=false
+          fi
+          gh release view "$OWNER_TAG" --repo "$GH_REPO" --json url,isPrerelease,tagName,targetCommitish,assets --jq '{url,isPrerelease,tagName,targetCommitish,assets:[.assets[].name]}'
