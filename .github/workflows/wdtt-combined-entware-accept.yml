@@ -1,0 +1,96 @@
+name: WDTT composed frozen owner Entware full-chain acceptance
+on:
+  pull_request:
+    branches: [integration/wdtt-owner-field-compat-20261021]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: wdtt-composed-fullaccept-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  reviewed-full-chain:
+    if: github.repository == 'saymer-alt/proxy-turn-vk-android' && (github.event_name == 'workflow_dispatch' || github.head_ref == 'integration/wdtt-combined-entware-accept-20261021')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    steps:
+      - name: Checkout exact combined source + separate acceptance proof
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: candidate
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Strict two-file diff against immutable PR34 client build
+        run: |
+          set -euo pipefail
+          cd candidate
+          fixed=b62bd1a7987713e8eb5ca468ef764d1c0ecac474
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          git cat-file -e "$fixed^{commit}"
+          git merge-base --is-ancestor "$fixed" HEAD
+          git diff --name-only "$fixed" HEAD > "$RUNNER_TEMP/reviewed-proof-files"
+          cat "$RUNNER_TEMP/reviewed-proof-files"
+          test "$(wc -l < "$RUNNER_TEMP/reviewed-proof-files")" -eq 2
+          if grep -Ev '^(tools/check_owner_composed_entware.py|\.github/workflows/wdtt-combined-entware-accept.yml)$' "$RUNNER_TEMP/reviewed-proof-files"; then
+            echo 'COMPOSED_UNREVIEWED_SOURCE_CHANGE' >&2
+            exit 1
+          fi
+          git diff --quiet "$fixed" -- go_client hardened-relay server.go tools/check_entware_candidate.py go.mod go.sum
+          grep -Fq 'time.Sleep(30 * time.Minute); labStatus("TIME_LIMIT"); os.Exit(75)' go_client/lab_security.go
+          grep -Fq 'wdttLabWorkerMeter.registered(sessionID)' go_client/session.go
+          grep -Fq 'WDTTLegacyShortPassword' go_client/lab_security.go
+      - name: Checkout independently pinned Entware base
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: saymer-alt/entware-go
+          ref: beb7e12c61deba465cdccfac77c8bb41ab0df89c
+          path: entware-ci
+          persist-credentials: false
+      - name: Checkout independently pinned KAS base
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: saymer-alt/keenetic-auto-setup
+          ref: 7c01e29c0ef278532e083a0d6868cfef4d2ca003
+          path: kas-ci
+          persist-credentials: false
+      - name: Verify pinned SDK and native tooling
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y qemu-user zstd busybox cmake make pkg-config libjson-c-dev shellcheck
+          curl -fL --retry 2 --connect-timeout 20 --max-time 240 \
+            https://github.com/ownik/entware-sdk/releases/download/v2026.07.04/entware-sdk-aarch64-3.10_gcc-8.4.0_glibc-2.27.Linux-x86_64.tar.zst \
+            -o sdk.tar.zst
+          echo 'd51f30c126425ebff203b107a1a0aa9d3a5844f6c481bc6ff4c117cadc208674  sdk.tar.zst' | sha256sum -c -
+          mkdir sdk-root
+          tar --zstd -xf sdk.tar.zst -C sdk-root --wildcards --wildcards-match-slash '*staging_dir/host/go/*'
+      - name: Frozen candidate complete Entware opkg/local pair/GETCONF acceptance
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          go_bin="$(find "$PWD/sdk-root" -type f -path '*/host/go/bin/go' -print -quit)"
+          test -n "$go_bin"
+          python3 candidate/tools/check_owner_composed_entware.py \
+            --go "$go_bin" \
+            --sdk sdk.tar.zst \
+            --entware entware-ci \
+            --kas kas-ci \
+            --work composed-acceptance-work
+      - name: Retain test evidence only, no ELF/IPK/public release
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4
+        with:
+          name: wdtt-combined-fullchain-owner-evidence
+          path: |
+            composed-acceptance-work/build/candidate-acceptance.json
+            composed-acceptance-work/build/build-report.json
+            composed-acceptance-work/build/owner-opkg-report.json
+            composed-acceptance-work/build/quarantine-ipk-report.json
+            composed-acceptance-work/build/local-pair-report.json
+            composed-acceptance-work/build/qwdtt-local-pair-report.json
+            composed-acceptance-work/build/socks-udp-pair-report.json
+            composed-acceptance-work/build/production-guard-report.json
+          if-no-files-found: warn
+          retention-days: 14

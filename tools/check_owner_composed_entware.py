@@ -1,0 +1,135 @@
+#!/usr/bin/env python3
+"""Reviewed source-locked combined PR34 candidate Entware/KAS acceptance; never production."""
+import argparse,hashlib,io,json,os,pathlib,shutil,subprocess,sys,tarfile
+ROOT=pathlib.Path(__file__).resolve().parents[1]
+ENTWARE='beb7e12c61deba465cdccfac77c8bb41ab0df89c'
+KAS='7c01e29c0ef278532e083a0d6868cfef4d2ca003'
+BASE='ff88cae7184561fe901e6e6a64f983ac6dd62980'
+def run(args,**kw):
+ try:return subprocess.check_output([str(x) for x in args],text=True,**kw).strip()
+ except subprocess.CalledProcessError as e:
+  print((e.output or '')[-4000:],file=sys.stderr);raise
+def sha(p):return hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest()
+def main():
+ p=argparse.ArgumentParser();p.add_argument('--go',required=True);p.add_argument('--sdk',required=True);p.add_argument('--entware',required=True);p.add_argument('--kas',required=True);p.add_argument('--work',required=True);a=p.parse_args()
+ work=pathlib.Path(a.work).resolve();work.mkdir(parents=True,exist_ok=False)
+ ent=pathlib.Path(a.entware).resolve();kas=pathlib.Path(a.kas).resolve();go=pathlib.Path(a.go).resolve()
+ assert run(['git','-C',ent,'rev-parse','HEAD'])==ENTWARE
+ assert run(['git','-C',kas,'rev-parse','HEAD'])==KAS
+ assert not run(['git','-C',ROOT,'status','--porcelain'])
+ candidate=run(['git','-C',ROOT,'rev-parse','HEAD'])
+ # Run only on EXACT combined client/runtime snapshot. The new checker+CI
+ # are the ONLY allowed differences; see outer CI GitHub diff whitelist.
+ pinned_combined='b62bd1a7987713e8eb5ca468ef764d1c0ecac474'
+ run(['git','-C',ROOT,'cat-file','-e',pinned_combined+'^{commit}'])
+ run(['git','-C',ROOT,'diff','--exit-code',pinned_combined,'--','go_client','hardened-relay','server.go','tools/check_entware_candidate.py'])
+
+ # The maintained relay, original module locks and every unrelated runtime source stay exact.
+ baseline=json.loads(run(['git','-C',ROOT,'show',BASE+':provenance/PHASE4-SOURCE-EQUIVALENCE.json']))['sha256']
+ # An explicit reviewed diagnostic extension, not a blanket runtime exemption.
+ # Every modified client source has an exact Git blob pin; the remaining
+ # Phase4 source equivalence guard below is still enforced unchanged.
+ diagnostic_blobs={
+  'go_client/packet_pipe_transport_test.go':'5bb8c6e4c87d6b90c6fab19b0619ed24b3a165ed',
+  'go_client/packet_pipe_pressure_test.go':'72ab25caa99fdcc124e8a322558b77671aa1fa18',
+  'go_client/packet_pipe_test.go':'de68eca2b17a57dc17438db096fb6b51c4ff6fda',
+  'go_client/packet_pipe.go':'38fdbc4bf610d9a91ce9349fc6b74d95399af42b',
+  'tools/check_lowmem_session.py':'82d05f5e22517ccfd0569fe44ed320c6174402a7',
+  'go_client/testdata/lowmem-wrap-golden.json':'e69c72022a0a1fb82e14992165126cb9347e0573',
+  'go_client/lowmem_session_lab_test.go':'cc749529a9c947048ad8a830639afa28502304e6',
+  'go_client/lowmem_lab_test.go':'5ff7215bc5103f65dc026655aa2c17c0e56dbe49',
+  'go_client/lowmem_regression_test.go':'b691429132852b1640131c6130e9f796f82e65e3',
+  'go_client/lowmem_admission.go':'462ffcbfe6ba0b86dc703941c62fd464d64ce831',
+  'go_client/obfs.go':'556c316f2ae715bdb583bff6cb5d676891f8b751',
+  'go_client/main.go':'2e553d4ca3ab97c7876b8f31b68bee79cff9791d',
+  'go_client/lab_security.go':'1fa3c612be384f0d67801a1ec67fb9f92f019976',
+  'go_client/session.go':'b06a2d320200679148b20ae0b4980d7c55d2d628',
+  'go_client/lab_getconf_status_test.go':'53e1fc751237d11555c1b64506a643bba0e956a5',
+  'go_client/socks5.go':'83dd16836debb08a58a8452e090a49d9b130acf8',
+  'go_client/lab_socks_mode_test.go':'70e555096897d2b672b3d9e39828cc64088a6311',
+  'go_client/qwdtt_import.go':'412ea8a0c11972aa04c32f014042fb73a6dd1b86',
+  'go_client/qwdtt_anonymous9_test.go':'4ddd6f02ef56a9a4e4ce65200c2220f99f411919',
+  'go_client/qwdtt_anonymous16_18_test.go':'69a61037e3fc521a2d25a57effbf59a146129d6f',
+  'go_client/socks_service.go':'11f3f6e0f8d3e908e1247f990d9bc2e52809f71c',
+  'go_client/socks_udp_associate.go':'0dea818d57e28332677efbbef52a09852c54b685',
+  'go_client/socks_udp_associate_test.go':'831a65d2720dfab7cca8c4eb2800e6ed81f12551',
+  'go_client/socks_telemetry.go':'c661a1a08609b18f9200b1be5760a55b7dc00ac9',
+  'go_client/socks_telemetry_test.go':'165a3f75287a21522cfc4ccff35c2dc6217033ce',
+  'go_client/socks_lifecycle_telemetry.go':'fb3aaf91cdebbb41ff12766cd0c14aad3f9c80d2',
+  'go_client/socks_relay.go':'43cedc81e33e44b596546de379532812acfbcd02',
+  'go_client/socks_relay_test.go':'ddb4a724f5e06d5774a4eb0bb9e0e32a8634adbf',
+  'hardened-relay/server_pair_fixture_test.go':'d5d1cb28d9def1924c71a2fcda6cd43ae662acb5',
+  'tools/check_socks_udp_pair.py':'2523ec173a79f16c4f697015024dcab67e893142',
+  'go_client/group.go':'c6cbac4f61f1ec20416f928457370339b66ab1c7',
+  'go_client/lab_worker_telemetry.go':'ca6df3fc6be486c90d00a7ebf696d5509e4cd6f7',
+  'go_client/lab_worker_telemetry_test.go':'062656b41ec6f2a9bb3b8e650bff05dd308ceacc',
+  'go_client/wdtt_colon_import.go':'13a4b0952f0d9de8ea5c53651ce9c4bb6bc9f089',
+  'go_client/wdtt_colon_import_test.go':'77419eec996634dfaf72138b9335ac52660b1fb4',
+  'go_client/wdtt_colon_short_password_test.go':'7784b5fbd301117340f86d8cba7b88fb07409831',
+ }
+ for name,blob in diagnostic_blobs.items():
+  assert run(['git','-C',ROOT,'hash-object',name])==blob,'UNREVIEWED_DIAGNOSTIC_SOURCE_CHANGE: '+name
+ allowed=set(diagnostic_blobs)|{'hardened-relay/server_pair_fixture_test.go'}
+ for name,digest in baseline.items():
+  if name not in allowed:assert sha(ROOT/name)==digest,'UNRELATED_RUNTIME_CHANGE: '+name
+ env=os.environ.copy();env.update(GOTOOLCHAIN='local',GOENV='off',GOWORK='off',GOTELEMETRY='off',CGO_ENABLED='0',GOOS='linux',GOARCH='amd64',GOMIPS='softfloat',GOPATH=str(work/'gopath'),GOCACHE=str(work/'gocache'));env.pop('GOROOT',None)
+ assert run([go,'version'],env=env)=='go version go1.26.1 linux/amd64'
+ # All existing client tests, plus importer boundaries and fuzz seeds; no public endpoint.
+ tests=run([go,'test','-mod=readonly','-short','-count=1','-timeout=120s','./...'],cwd=ROOT/'go_client',env=env)
+ fuzz=run([go,'test','-mod=readonly','-run','^$','-fuzz','^FuzzQwdttParse$','-fuzztime=5s','-parallel=2'],cwd=ROOT/'go_client',env=env)
+ expected={}
+ for arch in ['amd64','arm64','mipsle','mips']:
+  env['GOARCH']=arch;out=work/('direct-client-'+arch)
+  run([go,'build','-mod=readonly','-trimpath','-buildvcs=false','-ldflags=-s -w -buildid=','-o',out,'.'],cwd=ROOT/'go_client',env=env);expected[arch]=sha(out)
+ env['GOARCH']='amd64'
+ recipe=work/'recipe';shutil.copytree(ent,recipe,ignore=shutil.ignore_patterns('.git','__pycache__'))
+ wd=recipe/'wdtt'
+ shutil.copyfile(ROOT/'hardened-relay/server_pair_fixture_test.go',wd/'lab/server_pair_fixture_test.go')
+ files=run(['git','-C',ROOT,'ls-tree','-r','--name-only','HEAD']).splitlines()
+ lock={'repository':'https://github.com/saymer-alt/proxy-turn-vk-android.git','commit':candidate,'upstream_base':'1110a75f76e42c23149b8e24f9182c1ff179e515','files_sha256':{name:sha(ROOT/name) for name in files}}
+ (wd/'fork-source-lock.json').write_text(json.dumps(lock,indent=2)+'\n')
+ # The Phase5 binary-equality test cannot describe a new importer executable.
+ # Replace only that comparison in the PRIVATE recipe with independently built
+ # candidate equality; compare third-party inventory against the maintained base.
+ base_source=work/'base-source';base_source.mkdir()
+ raw=subprocess.check_output(['git','-C',str(ROOT),'archive',BASE])
+ with tarfile.open(fileobj=io.BytesIO(raw)) as archive:archive.extractall(base_source,filter='data')
+ run(['python3',wd/'license_audit.py','--go',go,'--module',base_source/'go_client','--output',work/'base-inventory'],env=env)
+ build=wd/'build_lab.py';text=build.read_text();start=text.index("    baseline=json.loads((HERE/'phase4-source-baseline.json').read_text())");end=text.index("    (work/'build-report.json').write_text",start)
+ replacement="    baseline=json.loads((HERE/'phase4-source-baseline.json').read_text())\n"
+ replacement+="    expected="+repr(expected)+"\n"
+ replacement+="    for record in records:assert record['sha256']==expected[record['arch']], 'CANDIDATE_REPRODUCIBILITY_FAILED'\n"
+ replacement+="    assert report['relay_sha256']==baseline['relay_sha256'], 'RELAY_CHANGED'\n"
+ replacement+="    old=json.loads((work.parent/'base-inventory/dependency-source-audit.json').read_text());new=json.loads((work/'license-evidence/dependency-source-audit.json').read_text())\n"
+ replacement+="    assert old['modules']==new['modules'] and old['packages']==new['packages'], 'DEPENDENCY_GRAPH_CHANGED'\n"
+ replacement+="    external=lambda inventory:{k:v for k,v in inventory['sources'].items() if not k.startswith('wg-turn-client@LOCAL/')}\n"
+ replacement+="    assert external(old)==external(new), 'THIRD_PARTY_SOURCE_CHANGED'\n"
+ replacement+="    prefix=lambda path:path.read_text().split('===== SELECTED SOURCE COPYRIGHT HEADERS =====')[0]\n"
+ replacement+="    assert prefix(work.parent/'base-inventory/NOTICE-COLLECTION.txt')==prefix(work/'license-evidence/NOTICE-COLLECTION.txt'), 'LICENSE_TEXT_CHANGED'\n"
+ replacement+="    report['candidate_comparison']={'client_sha256_before':baseline['client_sha256'],'client_sha256_after':expected,'independent_candidate_rebuild_identical':True,'relay_identical':True,'third_party_sources_and_notices_identical':True,'local_source_inventory_changed':True,'reason':'exact frozen combined PR34: qWDTT 18/1 and 18/2, numeric worker counters, classic colon imports with explicit guarded short-pass opt-in, bounded pipe, unchanged wire/relay/third-party sources; reviewed exact source blob pins and private offline pair only'}\n"
+ build.write_text(text[:start]+replacement+text[end:])
+ built=work/'build'
+ run(['python3',build,'--go',go,'--sdk-archive',pathlib.Path(a.sdk).resolve(),'--work',built,'--source',ROOT,'--cache',work/'gocache','--modules',work/'gopath'])
+ for name in ['test_packaging.py','test_owner_test_ipk.py','test_quarantine_retention.py','test_workflow_gate.py']:run(['python3',wd/name])
+ run(['python3',kas/'tests/wdtt-entware-lifecycle.py'])
+ run(['python3',wd/'verify_quarantine.py','--build',built,'--report',built/'quarantine-ipk-report.json'])
+ run(['python3',wd/'build_opkg_fixture.py',work/'opkg'])
+ run(['python3',wd/'test_owner_opkg.py','--opkg',work/'opkg/opkg-build/src/opkg-cl','--build',built,'--kas',kas,'--report',built/'owner-opkg-report.json'])
+ run(['python3',wd/'fetch_test_mihomo.py',work/'test-deps'])
+ run(['python3',wd/'local_pair.py','--harness',built/'server-pair.test','--relay',built/'wdtt-relay-linux-amd64','--client',built/'wt-client-linux-amd64','--mihomo',work/'test-deps/mihomo-compatible','--converter',kas/'experimental/wdtt/wg_to_mihomo.py','--report',built/'local-pair-report.json'])
+ pair=work/'qwdtt_pair.py';pair_text=(wd/'local_pair.py').read_text()
+ marker="            result['checks']['worker_registered_before_application_start']=True"
+ assert marker in pair_text
+ pair_text=pair_text.replace(marker,marker+"\n            wait_for(lambda:(d/'qwdtt-second-hash-turn').exists(),children)\n            result['checks']['actual_qwdtt_private_import_and_second_hash_TURN_auth']=True")
+ pair.write_text(pair_text)
+ run(['python3',pair,'--harness',built/'server-pair.test','--relay',built/'wdtt-relay-linux-amd64','--client',built/'wt-client-linux-amd64','--mihomo',work/'test-deps/mihomo-compatible','--converter',kas/'experimental/wdtt/wg_to_mihomo.py','--report',built/'qwdtt-local-pair-report.json'],env={**os.environ,'WDTT_QWDTT_CLIENT':str(built/'wt-client-linux-amd64')})
+ run(['python3',ROOT/'tools/check_socks_udp_pair.py','--harness',built/'server-pair.test','--client',built/'wt-client-linux-amd64','--report',built/'socks-udp-pair-report.json'])
+ run(['python3',wd/'test_production_boundary.py','--capture',work/'production-before.json'])
+ for shell in [['sh'],['busybox','ash']]:run([*shell,'-n',recipe/'warpscout/install.sh'])
+ run(['shellcheck','-S','error',recipe/'warpscout/install.sh'])
+ run(['python3','-m','unittest','discover','-s','tests','-v'],cwd=recipe)
+ run(['python3','-m','unittest','discover','-s','tests','-p','test_warpscout_installer.py'],cwd=recipe,env={**os.environ,'INSTALL_TEST_SHELL':'busybox'})
+ run(['python3',wd/'test_production_boundary.py','--verify',work/'production-before.json','--report',built/'production-guard-report.json'])
+ (built/'candidate-acceptance.json').write_text(json.dumps({'passed':True,'candidate':candidate,'entware':ENTWARE,'kas':KAS,'client_tests':tests,'fuzz':fuzz,'independent_client_sha256':expected,'public_servers_contacted':False,'production_recipe_modified':False,'temporary_recipe_changes':['fork-source-lock.json','build_lab.py candidate comparison']},indent=2)+'\n')
+ print('PASS frozen combined owner candidate: independent ELF rebuild + Entware opkg/lifecycle/local pair; evidence only')
+if __name__=='__main__':main()
