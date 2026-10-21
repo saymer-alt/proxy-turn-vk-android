@@ -56,6 +56,24 @@ func drainCaptchaResult() {
 	}
 }
 
+// redactStdinForLog возвращает безопасное для журнала представление
+// STDIN-строки. Команды управления логируются по имени; чувствительные
+// команды (TURN_CREDS, CAPTCHA_RESULT) — только по имени без содержимого;
+// неизвестные строки в лог не попадают вовсе. Обработка команды в switch
+// выполняется по исходной строке и не зависит от этой функции.
+func redactStdinForLog(line string) (string, bool) {
+	switch {
+	case line == "PAUSE", line == "RESUME", line == "STOP":
+		return line, true
+	case strings.HasPrefix(line, "TURN_CREDS|"):
+		return "TURN_CREDS|<redacted>", true
+	case strings.HasPrefix(line, "CAPTCHA_RESULT|"):
+		return "CAPTCHA_RESULT|<redacted>", true
+	default:
+		return "", false
+	}
+}
+
 func runHashChecks(ctx context.Context, hashes []string) {
 	log.Printf("[CHECK] Проверка VK-хешей: %d", len(hashes))
 	for i, hash := range hashes {
@@ -141,7 +159,9 @@ func main() {
 		for scanner.Scan() {
 			line := strings.TrimSpace(scanner.Text())
 			if !strings.Contains(line, "error:tunnel stopped") {
-				log.Printf("[STDIN] %s", line)
+				if safe, ok := redactStdinForLog(line); ok {
+					log.Printf("[STDIN] %s", safe)
+				}
 			}
 			switch {
 			case line == "PAUSE":
