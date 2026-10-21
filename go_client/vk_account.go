@@ -216,11 +216,11 @@ func requestAccountTurnCreds(ctx context.Context, link string, streamID int) (st
 	}
 }
 
+// shortLink больше не раскрывает содержимое приватной ссылки (раньше
+// возвращал первые 8 байт): в диагностический журнал идёт только длина.
+// Исходный link сохраняется для lookup/inject и машинного STDOUT-IPC.
 func shortLink(link string) string {
-	if len(link) <= 8 {
-		return link
-	}
-	return link[:8]
+	return fmt.Sprintf("<withheld:len=%d>", len(link))
 }
 
 func fetchAccountVkCreds(ctx context.Context, link string, streamID int) (string, string, []string, error) {

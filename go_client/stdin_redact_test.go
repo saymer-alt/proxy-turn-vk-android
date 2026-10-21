@@ -121,6 +121,27 @@ func TestStdinLogLineFiltersErrorMarker(t *testing.T) {
 	}
 }
 
+// TestShortLinkWithholdsContent: shortLink не должен выводить ни весь
+// приватный link, ни его префикс — только безопасную сводку (длину).
+func TestShortLinkWithholdsContent(t *testing.T) {
+	for name, link := range map[string]string{
+		"short": "c1",             // <= 8 байт: раньше возвращался целиком
+		"edge":  "CANARYabc",      // ровно 9 байт: раньше срезались первые 8
+		"long":  canaryLink,       // длинная фиктивная приватная ссылка
+	} {
+		got := shortLink(link)
+		if strings.Contains(got, link) {
+			t.Fatalf("%s: full link leaked: %q", name, got)
+		}
+		if len(link) > 8 && strings.Contains(got, link[:8]) {
+			t.Fatalf("%s: link prefix leaked: %q", name, got)
+		}
+		if !strings.Contains(got, "<withheld:") {
+			t.Fatalf("%s: expected withheld marker, got %q", name, got)
+		}
+	}
+}
+
 // TestVkAccountCredsLogsRedacted покрывает обе ветки handleTurnCredsStdin
 // (принято/отклонено) с фиктивной приватной ссылкой и кредами: журнал не
 // должен содержать link/логин/пароль, внутренняя авторизация сохраняется.
