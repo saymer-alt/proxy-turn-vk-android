@@ -1,0 +1,117 @@
+name: WDTT PR34 plus security41 owner prerelease
+on:
+  push:
+    branches: ['release/wdtt-pr34-sec41-owner-20261022']
+permissions:
+  contents: read
+jobs:
+  test:
+    if: github.repository == 'saymer-alt/wdtt-suite'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Exact source diff and owner-lab guard
+        run: |
+          set -euo pipefail
+          base=b62bd1a7987713e8eb5ca468ef764d1c0ecac474
+          git merge-base --is-ancestor "$base" HEAD
+          git diff --name-only "$base" HEAD | sort > "$RUNNER_TEMP/actual"
+          printf '%s\n' '.github/workflows/wdtt-pr34-sec41-owner-release.yml' 'go_client/main.go' 'go_client/stdin_redact_test.go' 'go_client/vk_account.go' > "$RUNNER_TEMP/expected"
+          diff -u "$RUNNER_TEMP/expected" "$RUNNER_TEMP/actual"
+          grep -Fq 'time.Sleep(30 * time.Minute); labStatus("TIME_LIMIT"); os.Exit(75)' go_client/lab_security.go
+          grep -Fq 'wdttMemoryMinimum(o.Auth, workers)' go_client/qwdtt_import.go
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go_client/go.mod
+          cache: false
+      - name: gofmt, vet, Linux race tests
+        run: |
+          set -euo pipefail
+          cd go_client
+          # PR34 baseline has pre-existing gofmt debt; lint only newly added Go test here.
+          test -z "$(gofmt -l stdin_redact_test.go)" || { gofmt -l stdin_redact_test.go; exit 1; }
+          go vet ./...
+          go test -short -race -count=1 -timeout=300s ./...
+  release:
+    needs: test
+    if: github.repository == 'saymer-alt/wdtt-suite' && github.ref == 'refs/heads/release/wdtt-pr34-sec41-owner-20261022'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    timeout-minutes: 45
+    env:
+      GOENV: 'off'
+      GOTOOLCHAIN: local
+      GOWORK: 'off'
+      GOTELEMETRY: 'off'
+      GOMAXPROCS: '2'
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check source and hard stop again
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor b62bd1a7987713e8eb5ca468ef764d1c0ecac474 HEAD
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          grep -Fq 'time.Sleep(30 * time.Minute); labStatus("TIME_LIMIT"); os.Exit(75)' go_client/lab_security.go
+      - name: Pinned Entware Go SDK and QEMU
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y qemu-user zstd binutils file
+          curl -fL --retry 2 --connect-timeout 20 --max-time 240 \
+            https://github.com/ownik/entware-sdk/releases/download/v2026.07.04/entware-sdk-aarch64-3.10_gcc-8.4.0_glibc-2.27.Linux-x86_64.tar.zst \
+            -o sdk.tar.zst
+          echo 'd51f30c126425ebff203b107a1a0aa9d3a5844f6c481bc6ff4c117cadc208674  sdk.tar.zst' | sha256sum -c -
+          mkdir sdk-root
+          tar --zstd -xf sdk.tar.zst -C sdk-root --wildcards --wildcards-match-slash '*staging_dir/host/go/*'
+          go_bin="$(find "$PWD/sdk-root" -type f -path '*/host/go/bin/go' -print -quit)"
+          test -x "$go_bin"
+          echo "GO_BIN=$go_bin" >> "$GITHUB_ENV"
+          echo "GOPATH=$RUNNER_TEMP/wdtt-sec41-gopath" >> "$GITHUB_ENV"
+          echo "GOCACHE=$RUNNER_TEMP/wdtt-sec41-cache" >> "$GITHUB_ENV"
+      - name: ARM64 and MIPSel synthetic plus security tests
+        run: |
+          set -euo pipefail
+          cd go_client
+          export GOOS=linux CGO_ENABLED=0 GOMIPS=softfloat
+          GOARCH=arm64 "$GO_BIN" test -mod=readonly -trimpath -buildvcs=false -c -o "$RUNNER_TEMP/arm64.test"
+          GOARCH=mipsle "$GO_BIN" test -mod=readonly -trimpath -buildvcs=false -c -o "$RUNNER_TEMP/mipsle.test"
+          pattern='^Test(WDTTWorkerMeter|WDTTColon|WDTTLegacyShortPass|OwnerQwdtt|RedactStdin|StdinLogLine|VkAccountCreds|ShortLink)'
+          qemu-aarch64 "$RUNNER_TEMP/arm64.test" -test.run "$pattern" -test.timeout=180s
+          qemu-mipsel "$RUNNER_TEMP/mipsle.test" -test.run "$pattern" -test.timeout=180s
+      - name: Build exact owner binaries and check SHA
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          export GOOS=linux CGO_ENABLED=0 GOMIPS=softfloat
+          (cd go_client && GOARCH=arm64 "$GO_BIN" build -mod=readonly -trimpath -buildvcs=false -ldflags='-s -w -buildid=' -o ../dist/wt-client-linux-arm64 .)
+          (cd go_client && GOARCH=mipsle "$GO_BIN" build -mod=readonly -trimpath -buildvcs=false -ldflags='-s -w -buildid=' -o ../dist/wt-client-linux-mipsle .)
+          readelf -h dist/wt-client-linux-arm64 | grep 'Machine:' | grep -q AArch64
+          readelf -h dist/wt-client-linux-mipsle | grep 'Machine:' | grep -q MIPS
+          chmod 700 dist/wt-client-linux-*
+          (cd dist && sha256sum wt-client-linux-arm64 wt-client-linux-mipsle > SHA256SUMS && sha256sum -c SHA256SUMS)
+          printf 'SOURCE_COMMIT=%s\nSOURCE_BASE_PR34=b62bd1a7987713e8eb5ca468ef764d1c0ecac474\nSECURITY_PR41=cb749bc79c989bb64cb5c561f1304c2fcc2c68f6\nOWNER_LAB_ONLY=true\nNO_STABLE_OR_LATEST=true\nSOCKS_LISTEN=127.0.0.1:1081\n' "$GITHUB_SHA" > dist/BUILD-INFO.txt
+          printf 'WDTT PR34+PR41 experimental ARM64/MIPSel owner lab. Verify SHA256SUMS. 30-minute hard stop. Not stable; no automatic install; keep IPC stdout private.\n' > dist/README.txt
+      - name: Publish non-latest experimental prerelease
+        run: |
+          set -euo pipefail
+          shortsha="${GITHUB_SHA:0:12}"
+          tag="wdtt-owner-pr34-sec41-20261022-${shortsha}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release already exists: $tag"; exit 0
+          fi
+          gh release create "$tag" dist/wt-client-linux-arm64 dist/wt-client-linux-mipsle dist/SHA256SUMS dist/BUILD-INFO.txt dist/README.txt \
+            --target "$GITHUB_SHA" --prerelease --latest=false \
+            --title "WDTT PR34+PR41 Owner Test (${shortsha})" \
+            --notes "Experimental owner-lab only. Combined PR34 with PR41 log redaction. CI gates: Linux race and ARM64/MIPSel QEMU; SHA checks. No stable promotion, IPK or device deployment."

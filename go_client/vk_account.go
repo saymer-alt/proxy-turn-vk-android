@@ -174,7 +174,7 @@ func handleTurnCredsStdinLine(line string) {
 		return
 	}
 	if payload.User == "" || payload.Pass == "" || len(payload.URLs) == 0 {
-		log.Printf("[VK Auth] TURN_CREDS rejected: empty fields for link %s", link)
+		log.Printf("[VK Auth] TURN_CREDS rejected: empty fields (link withheld from log)")
 		return
 	}
 	injectTurnCreds(link, payload.User, payload.Pass, payload.URLs)
@@ -182,7 +182,7 @@ func handleTurnCredsStdinLine(line string) {
 	payload.URLs = cloneStringSlice(normalized)
 	drainTurnCredsResult()
 	TurnCredsResultChan <- payload
-	log.Printf("[VK Auth] Account TURN creds received for link %s (urls=%d)", link, len(payload.URLs))
+	log.Printf("[VK Auth] Account TURN creds received (urls=%d)", len(payload.URLs))
 }
 
 func requestAccountTurnCreds(ctx context.Context, link string, streamID int) (string, string, []string, error) {
@@ -191,6 +191,8 @@ func requestAccountTurnCreds(ctx context.Context, link string, streamID int) (st
 		return u, p, urls, nil
 	}
 
+	// VK_AUTH_REQUIRED|<link> is private IPC, not diagnostic logging.
+	// KAS/supervisor must not copy the raw stream to public logs.
 	drainTurnCredsResult()
 	fmt.Printf("VK_AUTH_REQUIRED|%s\n", link)
 	log.Printf("[STREAM %d] [VK Auth] Waiting for account TURN creds (link=%s...)", streamID, shortLink(link))
@@ -213,11 +215,9 @@ func requestAccountTurnCreds(ctx context.Context, link string, streamID int) (st
 	}
 }
 
+// Never leak private link bytes into diagnostic logs.
 func shortLink(link string) string {
-	if len(link) <= 8 {
-		return link
-	}
-	return link[:8]
+	return fmt.Sprintf("<withheld:len=%d>", len(link))
 }
 
 func fetchAccountVkCreds(ctx context.Context, link string, streamID int) (string, string, []string, error) {
