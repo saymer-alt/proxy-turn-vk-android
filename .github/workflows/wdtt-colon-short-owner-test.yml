@@ -1,0 +1,99 @@
+name: WDTT classic short password guarded opt-in (owner-only)
+on:
+  pull_request:
+    branches: [feature/wdtt-colon-private-import-owner-20261021]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: wdtt-shortpass-candidate-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  synthetic-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Strict reviewed diff relative to isolated PR31
+        run: |
+          set -euo pipefail
+          base=cea79b77d089c2cebfd310485fbc5bc2c726152f
+          git cat-file -e "$base^{commit}"
+          git diff --name-only "$base" HEAD > "$RUNNER_TEMP/short-changed-files"
+          cat "$RUNNER_TEMP/short-changed-files"
+          test "$(wc -l < "$RUNNER_TEMP/short-changed-files")" -eq 6
+          if grep -Ev '^(go_client/qwdtt_import.go|go_client/lab_security.go|go_client/wdtt_colon_import.go|go_client/wdtt_colon_short_password_test.go|provenance/WDTT-LEGACY-SHORT-PASSWORD-OWNER-LAB.md|\.github/workflows/wdtt-colon-short-owner-test.yml)$' "$RUNNER_TEMP/short-changed-files"; then
+            echo "UNREVIEWED_SHORT_PASSWORD_SOURCE_CHANGE" >&2
+            exit 1
+          fi
+          grep -Fq 'time.Sleep(30 * time.Minute); labStatus("TIME_LIMIT"); os.Exit(75)' go_client/lab_security.go
+          grep -Fq 'wdttMemoryMinimum(o.Auth, workers)' go_client/qwdtt_import.go
+          grep -Fq 'return qImportWithParser(o, qParse)' go_client/qwdtt_import.go
+          grep -Fq 'c.Mode = "socks"' go_client/wdtt_colon_import.go
+          grep -Fq 'WDTTLegacyShortPassword' go_client/lab_security.go
+          grep -Fq 'f.BoolVar(&o.AllowLegacyShortPassword, "allow-legacy-short-password", false, "")' go_client/wdtt_colon_import.go
+          git diff --exit-code "$base" -- go_client/session.go go_client/group.go go_client/socks_telemetry.go go_client/packet_pipe.go
+      - name: Pinned Go SDK and QEMU
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y qemu-user zstd gcc
+          curl -fL --retry 2 --connect-timeout 20 --max-time 240 \
+            https://github.com/ownik/entware-sdk/releases/download/v2026.07.04/entware-sdk-aarch64-3.10_gcc-8.4.0_glibc-2.27.Linux-x86_64.tar.zst \
+            -o sdk.tar.zst
+          echo 'd51f30c126425ebff203b107a1a0aa9d3a5844f6c481bc6ff4c117cadc208674  sdk.tar.zst' | sha256sum -c -
+          mkdir sdk-root
+          tar --zstd -xf sdk.tar.zst -C sdk-root --wildcards --wildcards-match-slash '*staging_dir/host/go/*'
+          go_bin="$(find "$PWD/sdk-root" -type f -path '*/host/go/bin/go' -print -quit)"
+          test -n "$go_bin"
+          echo "GO_BIN=$go_bin" >> "$GITHUB_ENV"
+          echo "GOPATH=$RUNNER_TEMP/wdtt-short-gopath" >> "$GITHUB_ENV"
+          echo "GOCACHE=$RUNNER_TEMP/wdtt-short-gocache" >> "$GITHUB_ENV"
+      - name: All short Go unit tests including legacy qWDTT
+        env:
+          GOENV: 'off'
+          GOTOOLCHAIN: local
+          GOWORK: 'off'
+          GOTELEMETRY: 'off'
+          GOMAXPROCS: '2'
+        run: |
+          set -euo pipefail
+          cd go_client
+          CGO_ENABLED=0 "$GO_BIN" test -mod=readonly -short -count=1 -timeout=300s ./...
+      - name: Go short race suite
+        env:
+          GOENV: 'off'
+          GOTOOLCHAIN: local
+          GOWORK: 'off'
+          GOTELEMETRY: 'off'
+          GOMAXPROCS: '2'
+        run: |
+          set -euo pipefail
+          cd go_client
+          CGO_ENABLED=1 CC=/usr/bin/gcc "$GO_BIN" test -mod=readonly -race -short -count=1 -timeout=300s ./...
+      - name: ARM64 and MIPSel cross-architecture offline parser tests
+        env:
+          GOENV: 'off'
+          GOTOOLCHAIN: local
+          GOWORK: 'off'
+          GOTELEMETRY: 'off'
+          GOOS: linux
+          CGO_ENABLED: '0'
+          GOMIPS: softfloat
+          GOMAXPROCS: '2'
+        run: |
+          set -euo pipefail
+          cd go_client
+          GOARCH=arm64 "$GO_BIN" test -mod=readonly -trimpath -buildvcs=false -c -o "$RUNNER_TEMP/short-arm64.test"
+          GOARCH=mipsle "$GO_BIN" test -mod=readonly -trimpath -buildvcs=false -c -o "$RUNNER_TEMP/short-mipsle.test"
+          qemu-aarch64 "$RUNNER_TEMP/short-arm64.test" -test.run '^TestWDTT(Colon|LegacyShortPass)' -test.timeout=120s
+          qemu-mipsel "$RUNNER_TEMP/short-mipsle.test" -test.run '^TestWDTT(Colon|LegacyShortPass)' -test.timeout=120s
+          file "$RUNNER_TEMP"/short-*.test
+          sha256sum "$RUNNER_TEMP"/short-*.test
+      - name: No owner credentials, release or deploy
+        run: |
+          echo 'Offline Go tests only; no public endpoint probes, package, ELF/IPK or profile upload.'

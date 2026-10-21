@@ -104,12 +104,22 @@ func wdttColonParse(raw []byte, o qOptions, availableKiB int64) (labConfig, stri
 	if strings.EqualFold(parts[5], "VK_HASH") {
 		return fail("HASH_PLACEHOLDER_UNRESOLVED")
 	}
+	// Exact server-issued password bytes must be preserved. HKDF does not
+	// stretch password entropy; operator opt-in only acknowledges legacy
+	// interoperability risk and is not an assurance of password strength.
+	if len(parts[4]) < 16 {
+		if !o.AllowLegacyShortPassword {
+			return fail("SHORT_PASSWORD_OPT_IN_REQUIRED")
+		}
+		if !wdttLegacyShortPasswordValid(parts[4]) {
+			return fail("SHORT_PASSWORD_FORMAT_REJECTED")
+		}
+	}
 
 	// Canonical qWDTT admission is reused as-is: exact worker group plans,
 	// private keys, duplicate-hash rejection, memory floor, explicit auth,
-	// device and DNS settings. This intentionally keeps its >=16 password
-	// requirement; known 12-char legacy links are parseable syntax but are
-	// NOT admitted without a separate narrowly reviewed runtime policy.
+	// device and DNS settings. The ordinary qWDTT importer always retains
+	// its >=16 requirement; only this CLI can explicitly set the exception.
 	canonical := "qwdtt://config?" + url.Values{
 		"name":    {name},
 		"peer":    {net.JoinHostPort(host, strconv.Itoa(dtlsPort))},
@@ -138,7 +148,7 @@ func wdttColonImport(o qOptions) error {
 
 func wdttColonImportCLI(args []string, out, errOut io.Writer) int {
 	if len(args) == 1 && (args[0] == "-h" || args[0] == "--help") {
-		fmt.Fprintln(out, "WDTT colon offline import: -uri-file PRIVATE0600 -output-file NEW_PRIVATE0600 -auth anonymous -max-workers 9|16|18 -device EXPLICIT_ID -dns EXPLICIT_CHOICE; SOCKS loopback 127.0.0.1:1081 only, parent directories 0700, input/outputs 0600, no secret argv or network; legacy wdtt://base64(JSON) is NOT supported")
+		fmt.Fprintln(out, "WDTT colon offline import: -uri-file PRIVATE0600 -output-file NEW_PRIVATE0600 -auth anonymous -max-workers 9|16|18 -device EXPLICIT_ID -dns EXPLICIT_CHOICE [--allow-legacy-short-password (12..15 ASCII alphanumeric only)]; SOCKS loopback 127.0.0.1:1081 only, parent directories 0700, input/outputs 0600, no secret argv or network; wdtt://base64(JSON) is NOT supported")
 		return 0
 	}
 	if unix.Setrlimit(unix.RLIMIT_CORE, &unix.Rlimit{}) != nil {
@@ -155,6 +165,7 @@ func wdttColonImportCLI(args []string, out, errOut io.Writer) int {
 	f.StringVar(&o.Credentials, "credentials-file", "", "")
 	f.StringVar(&o.DNS, "dns", "", "")
 	f.IntVar(&o.MaxWorkers, "max-workers", 0, "")
+	f.BoolVar(&o.AllowLegacyShortPassword, "allow-legacy-short-password", false, "")
 	if f.Parse(args) != nil || f.NArg() != 0 {
 		fmt.Fprintln(errOut, "WDTT_COLON_OPTIONS_INVALID")
 		return 78

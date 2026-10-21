@@ -34,6 +34,7 @@ type labConfig struct {
 	SocksListen string `json:"socks_listen"`
 	QWDTTRequestedWorkers int `json:"qwdtt_requested_workers,omitempty"`
 	QWDTTEffectiveWorkers int `json:"qwdtt_effective_workers,omitempty"`
+	WDTTLegacyShortPassword bool `json:"wdtt_legacy_short_password,omitempty"`
 }
 
 var labCfg labConfig
@@ -232,6 +233,22 @@ func labApplyFlags() {
 		}
 	}
 }
+// The exception is intentionally narrow: legacy colon links may carry
+// 12..15-byte ASCII alphanumeric server-issued secrets. A short password does
+// NOT become stronger through HKDF; this check is syntax, not an entropy proof.
+func wdttLegacyShortPasswordValid(password string) bool {
+	if len(password) < 12 || len(password) >= 16 {
+		return false
+	}
+	for i := 0; i < len(password); i++ {
+		ch := password[i]
+		if !(ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z' || ch >= '0' && ch <= '9') {
+			return false
+		}
+	}
+	return true
+}
+
 func labValidate(c labConfig) error {
 	host, port, err := net.SplitHostPort(c.Listen)
 	if err != nil || host != "127.0.0.1" || port == "0" {
@@ -245,7 +262,13 @@ func labValidate(c labConfig) error {
 	if err != nil || net.ParseIP(h).To4() == nil || net.ParseIP(h).IsLoopback() == false && net.ParseIP(h).IsUnspecified() {
 		return labErr
 	}
-	if len(c.Password) < 16 || c.VK == "" || strings.ContainsAny(c.Password, "|\r\n") || strings.ContainsAny(c.Device, "|\r\n") {
+	legacyShortOK := c.WDTTLegacyShortPassword && c.Auth == "anonymous" &&
+		c.Mode == "socks" && c.SocksListen == "127.0.0.1:1081" &&
+		wdttLegacyShortPasswordValid(c.Password)
+	if (len(c.Password) < 16 && !legacyShortOK) ||
+		(c.WDTTLegacyShortPassword && !legacyShortOK) ||
+		len(c.Password) > 1024 || c.VK == "" ||
+		strings.ContainsAny(c.Password, "|\r\n") || strings.ContainsAny(c.Device, "|\r\n") {
 		return labErr
 	}
 	if c.Auth != "account" && c.Auth != "anonymous" {

@@ -23,6 +23,9 @@ import (
 type qOptions struct {
 	Input, Output, Auth, Device, Credentials, DNS string
 	MaxWorkers                                    int
+	// The CLI enables this ONLY for explicit classic wdtt:// colon imports.
+	// The ordinary qwdtt:// CLI never exposes or sets this flag.
+	AllowLegacyShortPassword bool
 }
 
 func qError(code string) error { return errors.New("WDTT_QWDTT_" + code) }
@@ -271,10 +274,17 @@ func qParse(raw []byte, o qOptions, availableKiB int64) (labConfig, string, erro
 		hashes[i] = h
 	}
 	pass := values.Get("pass")
-	if len(pass) < 16 || len(pass) > 1024 || strings.Contains(pass, "|") {
+	legacyShort := len(pass) < 16 && o.AllowLegacyShortPassword &&
+		o.Auth == "anonymous" && wdttLegacyShortPasswordValid(pass)
+	if (len(pass) < 16 && !legacyShort) || len(pass) > 1024 || strings.Contains(pass, "|") {
 		return reject("PASSWORD_INVALID")
 	}
 	c = labConfig{Peer: peer, Listen: fmt.Sprintf("127.0.0.1:%d", local), Password: pass, VK: strings.Join(hashes, ","), Auth: o.Auth, CredsFile: o.Credentials, DNS: o.DNS, Workers: runtimeWorkers, Device: o.Device}
+	if legacyShort {
+		c.Mode = "socks"
+		c.SocksListen = "127.0.0.1:1081"
+		c.WDTTLegacyShortPassword = true
+	}
 	if c.Auth == "anonymous" {
 		c.QWDTTRequestedWorkers = workers
 		c.QWDTTEffectiveWorkers = workers
