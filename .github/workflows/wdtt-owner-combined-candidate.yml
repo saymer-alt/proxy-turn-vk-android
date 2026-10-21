@@ -1,0 +1,105 @@
+name: WDTT combined field candidate ARM64/MIPSel owner artifact
+on:
+  pull_request:
+    branches: [feature/wdtt-legacy-short-pass-owner-20261021]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: wdtt-integrated-owner-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build-integrated-owner:
+    if: github.repository == 'saymer-alt/proxy-turn-vk-android' && (github.event_name == 'workflow_dispatch' || github.head_ref == 'integration/wdtt-owner-field-compat-20261021')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      GOENV: 'off'
+      GOTOOLCHAIN: local
+      GOWORK: 'off'
+      GOTELEMETRY: 'off'
+      GOMAXPROCS: '2'
+    steps:
+      - name: Checkout exact PR head, never synthetic merge ref
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Strict 7-file integration allowlist and unchanged safety admission
+        run: |
+          set -euo pipefail
+          base=8cd625f983cf8fe745cecfd0bd570bc8838daff5
+          git cat-file -e "$base^{commit}"
+          git merge-base --is-ancestor "$base" HEAD
+          git diff --name-only "$base" HEAD > "$RUNNER_TEMP/owner-integrated-files"
+          cat "$RUNNER_TEMP/owner-integrated-files"
+          test "$(wc -l < "$RUNNER_TEMP/owner-integrated-files")" -eq 7
+          if grep -Ev '^(go_client/lab_worker_telemetry.go|go_client/lab_worker_telemetry_test.go|go_client/session.go|go_client/group.go|go_client/socks_telemetry.go|provenance/WDTT-OWNER-COMBINED-CANDIDATE-2026-10-21.md|\.github/workflows/wdtt-owner-combined-candidate.yml)$' "$RUNNER_TEMP/owner-integrated-files"; then
+            echo 'UNREVIEWED_INTEGRATION_SOURCE_CHANGE' >&2
+            exit 1
+          fi
+          git diff --exit-code "$base" -- go_client/lab_security.go go_client/qwdtt_import.go go_client/wdtt_colon_import.go go_client/packet_pipe.go go_client/wrap.go server.go
+          grep -Fq 'time.Sleep(30 * time.Minute); labStatus("TIME_LIMIT"); os.Exit(75)' go_client/lab_security.go
+          grep -Fq 'c.WDTTLegacyShortPassword' go_client/lab_security.go
+          grep -Fq 'wdttMemoryMinimum(o.Auth, workers)' go_client/qwdtt_import.go
+          grep -Fq 'wdttLabWorkerMeter.snapshot(info)' go_client/socks_telemetry.go
+          grep -Fq 'wdttLabWorkerMeter.registered(sessionID)' go_client/session.go
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+      - name: Install dependencies and verified pinned Entware Go SDK
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y qemu-user zstd gcc binutils file
+          curl -fL --retry 2 --connect-timeout 20 --max-time 240 \
+            https://github.com/ownik/entware-sdk/releases/download/v2026.07.04/entware-sdk-aarch64-3.10_gcc-8.4.0_glibc-2.27.Linux-x86_64.tar.zst \
+            -o sdk.tar.zst
+          echo 'd51f30c126425ebff203b107a1a0aa9d3a5844f6c481bc6ff4c117cadc208674  sdk.tar.zst' | sha256sum -c -
+          mkdir sdk-root
+          tar --zstd -xf sdk.tar.zst -C sdk-root --wildcards --wildcards-match-slash '*staging_dir/host/go/*'
+          go_bin="$(find "$PWD/sdk-root" -type f -path '*/host/go/bin/go' -print -quit)"
+          test -n "$go_bin"
+          echo "GO_BIN=$go_bin" >> "$GITHUB_ENV"
+          echo "GOPATH=$RUNNER_TEMP/owner-combined-gopath" >> "$GITHUB_ENV"
+          echo "GOCACHE=$RUNNER_TEMP/owner-combined-gocache" >> "$GITHUB_ENV"
+      - name: Full short client test and native race suite
+        run: |
+          set -euo pipefail
+          cd go_client
+          CGO_ENABLED=0 "$GO_BIN" test -mod=readonly -short -count=1 -timeout=300s ./...
+          CGO_ENABLED=1 CC=/usr/bin/gcc "$GO_BIN" test -mod=readonly -race -short -count=1 -timeout=300s ./...
+      - name: Cross-architecture synthetic feature composition under QEMU
+        run: |
+          set -euo pipefail
+          cd go_client
+          export GOOS=linux CGO_ENABLED=0 GOMIPS=softfloat
+          GOARCH=arm64 "$GO_BIN" test -mod=readonly -trimpath -buildvcs=false -c -o "$RUNNER_TEMP/combined-arm64.test"
+          GOARCH=mipsle "$GO_BIN" test -mod=readonly -trimpath -buildvcs=false -c -o "$RUNNER_TEMP/combined-mipsle.test"
+          qemu-aarch64 "$RUNNER_TEMP/combined-arm64.test" -test.run '^Test(WDTTWorkerMeter|WDTTColon|WDTTLegacyShortPass|OwnerQwdtt)' -test.timeout=150s
+          qemu-mipsel "$RUNNER_TEMP/combined-mipsle.test" -test.run '^Test(WDTTWorkerMeter|WDTTColon|WDTTLegacyShortPass|OwnerQwdtt)' -test.timeout=150s
+      - name: Build and verify exact source ARM64 + MIPSel standalone owner ELFs
+        run: |
+          set -euo pipefail
+          mkdir -p owner-candidate
+          export GOOS=linux CGO_ENABLED=0 GOMIPS=softfloat
+          (cd go_client && GOARCH=arm64 "$GO_BIN" build -mod=readonly -trimpath -buildvcs=false -ldflags='-s -w -buildid=' -o ../owner-candidate/wt-client-linux-arm64 .)
+          (cd go_client && GOARCH=mipsle "$GO_BIN" build -mod=readonly -trimpath -buildvcs=false -ldflags='-s -w -buildid=' -o ../owner-candidate/wt-client-linux-mipsle .)
+          file owner-candidate/wt-client-linux-*
+          file owner-candidate/wt-client-linux-arm64 | grep -Eq 'ARM aarch64|aarch64|ARM64'
+          file owner-candidate/wt-client-linux-mipsle | grep -q 'MIPS'
+          readelf -h owner-candidate/wt-client-linux-arm64 | grep 'Machine:' | grep -q 'AArch64'
+          readelf -h owner-candidate/wt-client-linux-mipsle | grep 'Machine:' | grep -q 'MIPS'
+          chmod 700 owner-candidate/wt-client-linux-*
+          (cd owner-candidate && sha256sum wt-client-linux-arm64 wt-client-linux-mipsle > SHA256SUMS && sha256sum -c SHA256SUMS)
+          printf 'SOURCE_COMMIT=%s\nSOURCE_BRANCH=integration/wdtt-owner-field-compat-20261021\nOWNER_LAB_ONLY=true\nNO_RELEASE_OR_IPK=true\nCOMBINED_DRAFT_PRS=28,30,31,32\nSOCKS_LISTEN=127.0.0.1:1081\nNO_PRODUCTION_DEPLOYMENT=true\n' "$(git rev-parse HEAD)" > owner-candidate/BUILD-INFO.txt
+          # Offline help invocation should NOT contact VK or open UDP sockets.
+          qemu-aarch64 owner-candidate/wt-client-linux-arm64 -h | grep -Fq 'owner laboratory profile'
+          qemu-mipsel owner-candidate/wt-client-linux-mipsle -h | grep -Fq 'owner laboratory profile'
+      - name: Retain checksum-verified temporary GitHub Actions artifacts
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4
+        with:
+          name: wdtt-owner-combined-field-candidate
+          path: owner-candidate/
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
